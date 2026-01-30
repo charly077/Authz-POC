@@ -1,0 +1,149 @@
+node:
+  id: "envoy-node"
+  cluster: "envoy-cluster"
+static_resources:
+  listeners:
+  - name: listener_0
+    address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 8000
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          codec_type: AUTO
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: local_service
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/auth"
+                route:
+                  cluster: keycloak_service
+              - match:
+                  prefix: "/api"
+                route:
+                  cluster: test_app_service
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: test_app_service
+          http_filters:
+          - name: envoy.filters.http.lua
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+              inline_code: |
+                function envoy_on_request(request_handle)
+                  print("--- Request Headers ---")
+                  for key, value in pairs(request_handle:headers()) do
+                    print(key .. ": " .. value)
+                  end
+                  print("-----------------------")
+                end
+          - name: envoy.filters.http.oauth2
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.oauth2.v3.OAuth2
+              config:
+                token_endpoint:
+                  cluster: keycloak_service
+                  uri: http://keycloak:8080/realms/myrealm/protocol/openid-connect/token
+                  timeout: 3s
+                authorization_endpoint: http://localhost:8080/realms/myrealm/protocol/openid-connect/auth
+                redirect_uri: "http://localhost:8000/callback"
+                redirect_path_matcher:
+                  path:
+                    exact: /callback
+                signout_path:
+                  path:
+                    exact: /signout
+                auth_scopes:
+                  - openid
+                  - profile
+                  - email
+                credentials:
+                  client_id: envoy
+                  token_secret:
+                    name: token
+                    sds_config:
+                      resource_api_version: V3
+                      path_config_source:
+                        path: "/etc/envoy/token_secret.yaml"
+                  hmac_secret:
+                    name: hmac
+                    sds_config:
+                      resource_api_version: V3
+                      path_config_source:
+                        path: "/etc/envoy/hmac_secret.yaml"
+                # Pass the token to the backend/OPA
+                forward_bearer_token: true
+                pass_through_matcher:
+                  - name: ":path"
+                    string_match:
+                      prefix: "/public"
+                  - name: ":path"
+                    string_match:
+                      prefix: "/auth"
+                  - name: ":path"
+                    string_match:
+                      prefix: "/logout"
+          - name: envoy.filters.http.ext_authz
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+              grpc_service:
+                envoy_grpc:
+                  cluster_name: opa_service
+                timeout: 0.25s
+              transport_api_version: V3
+              failure_mode_allow: false
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  clusters:
+  - name: test_app_service
+    connect_timeout: 0.25s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: test_app_service
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: test-app
+                port_value: 3000
+
+  - name: keycloak_service
+    connect_timeout: 0.25s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: keycloak_service
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: keycloak
+                port_value: 8080
+
+  - name: opa_service
+    connect_timeout: 0.25s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    http2_protocol_options: {}
+    load_assignment:
+      cluster_name: opa_service
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: opa
+                port_value: 9191

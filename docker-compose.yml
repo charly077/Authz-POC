@@ -1,0 +1,122 @@
+services:
+  # Database for Keycloak and OpenFGA
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: keycloak
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - auth-net
+
+  # Identity Provider
+  keycloak:
+    image: keycloak/keycloak:22.0
+    container_name: keycloak
+    command: start-dev --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: admin
+      KC_DB_PASSWORD: password
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./infra/keycloak/realm.json:/opt/keycloak/data/import/realm.json
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - auth-net
+
+  # Fine-Grained Auth (ReBAC)
+  openfga:
+    image: openfga/openfga:latest
+    container_name: openfga
+    command: run
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://admin:password@postgres:5432/openfga?sslmode=disable
+    depends_on:
+      - postgres
+    ports:
+      - "8081:8080" # HTTP API
+      - "8082:8081" # gRPC API
+      - "3000:3000" # Playground
+    networks:
+      - auth-net
+
+  # Policy Engine (ABAC) with Envoy Plugin
+  opa:
+    image: openpolicyagent/opa:latest-envoy
+    platform: linux/amd64
+    container_name: opa
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-level=debug"
+      - "--config-file=/config/opa-config.yaml"
+    volumes:
+      - ./opa/config.yaml:/config/opa-config.yaml
+    ports:
+      - "8181:8181"
+      - "9191:9191"
+    networks:
+      - auth-net
+
+  # Reverse Proxy
+  envoy:
+    image: envoyproxy/envoy:v1.26-latest
+    entrypoint: /usr/local/bin/envoy
+    command: -c /etc/envoy/envoy.yaml
+    container_name: envoy
+    enable_ipv6: false
+    ports:
+      - "8000:8000" # Public entry point
+      - "9901:9901" # Admin interface
+    volumes:
+      - ./envoy/envoy.yaml:/etc/envoy/envoy.yaml
+      - ./envoy/token_secret.yaml:/etc/envoy/token_secret.yaml
+      - ./envoy/hmac_secret.yaml:/etc/envoy/hmac_secret.yaml
+    networks:
+      - auth-net
+
+  # Protected Application
+  test-app:
+    build:
+      context: ./test-app
+    container_name: test-app
+    environment:
+      PORT: 3000
+    networks:
+      - auth-net
+
+  # Business AI Application
+  ai-manager:
+    build:
+      context: ./ai-manager
+    container_name: ai-manager
+    env_file:
+      - .env
+    environment:
+      OPA_URL: http://opa:8181
+      OPENFGA_URL: http://openfga:8081
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./opa/policies:/policies
+    networks:
+      - auth-net
+
+networks:
+  auth-net:
+    driver: bridge
+
+volumes:
+  postgres_data:

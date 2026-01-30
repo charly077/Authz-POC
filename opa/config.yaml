@@ -1,0 +1,9 @@
+decision_logs:
+  console: true
+plugins:
+  envoy_ext_authz_grpc:
+    addr: :9191
+    path: envoy/authz/allow
+services:
+  openfga:
+    url: http://openfga:8081

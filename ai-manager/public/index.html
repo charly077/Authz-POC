@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuthZ AI Manager</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>AI Authorization Manager</h1>
+            <p>Define policies using natural language. We handle the rest.</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="generate">✨ Generate Rules</button>
+            <button class="tab-btn" data-tab="chat">💬 View & Chat</button>
+        </div>
+
+        <main id="generate" class="tab-content active">
+            <div class="card input-section">
+                <h2>Describe your Policy</h2>
+                <textarea id="promptInput"
+                    placeholder="e.g., Allow editors to view documents they created..."></textarea>
+                <div class="actions">
+                    <button id="generateBtn" class="primary-btn">Generate Rule <span class="icon">✨</span></button>
+                </div>
+            </div>
+
+            <div class="card output-section" id="outputCard" style="opacity: 0.5; pointer-events: none;">
+                <h2>Generated Configuration</h2>
+                <div class="badge" id="typeBadge">OPA</div>
+                <pre><code id="codeOutput">Waiting for input...</code></pre>
+                <p id="explanation"></p>
+                <div class="actions">
+                    <button id="applyBtn" class="secondary-btn">Apply Policy</button>
+                </div>
+            </div>
+        </main>
+
+        <main id="chat" class="tab-content">
+            <div class="chat-layout">
+                <div class="rules-view">
+                    <h3>Current Rules</h3>
+                    <div class="rule-block">
+                        <h4>OPA Policy (Rego)</h4>
+                        <pre><code id="opaContent">Loading...</code></pre>
+                    </div>
+                </div>
+                <div class="chat-interface">
+                    <h3>AI Assistant</h3>
+                    <div id="chatHistory" class="chat-history">
+                        <div class="message ai">Hello! I've analyzed your current policies. Ask me anything about them.
+                        </div>
+                    </div>
+                    <div class="chat-input-area">
+                        <input type="text" id="chatInput" placeholder="Ask about the rules...">
+                        <button id="sendChatBtn" class="primary-btn">Send</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+
+</html>
