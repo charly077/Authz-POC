@@ -65,8 +65,8 @@ graph LR
     ./run_poc.sh
     ```
 
-3.  **Setup Keycloak** (First run only):
-    The `setup_keycloak.sh` script runs automatically, creating the `AuthorizationRealm`, client `envoy`, and users `alice` and `bob`.
+3.  **Keycloak** (automatic):
+    The realm, client, and users are imported automatically on first boot from `infra/keycloak/realm.json` via Keycloak's `--import-realm` flag.
 
 ### Usage
 *   **Public Access**: [http://localhost:8000/public](http://localhost:8000/public)
