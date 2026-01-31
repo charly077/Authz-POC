@@ -11,11 +11,56 @@ const port = 5000;
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
+// CORS for test-app at :8000
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', 'http://localhost:8000');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "YOUR_API_KEY");
 
 const POLICY_PATH = '/policies/policy.rego';
+const OPENFGA_URL = process.env.OPENFGA_URL || 'http://openfga:8080';
+const CONFIG_FILE = '/shared/openfga-store.json';
 
-// Read the current OPA policy from disk
+// ──────────────────────────────────────
+// OpenFGA config (read from shared volume)
+// ──────────────────────────────────────
+let fgaStoreId = null;
+let fgaModelId = null;
+let fgaReady = false;
+
+async function loadFGAConfig() {
+    for (let attempt = 1; attempt <= 30; attempt++) {
+        try {
+            if (fs.existsSync(CONFIG_FILE)) {
+                const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+                if (cfg.storeId && cfg.modelId) {
+                    fgaStoreId = cfg.storeId;
+                    fgaModelId = cfg.modelId;
+                    fgaReady = true;
+                    console.log(`Loaded OpenFGA config: store=${fgaStoreId} model=${fgaModelId}`);
+                    return;
+                }
+            }
+        } catch (e) {
+            // not ready yet
+        }
+        console.log(`Waiting for OpenFGA config (${attempt}/30)...`);
+        await new Promise(r => setTimeout(r, 3000));
+    }
+    console.error('Failed to load OpenFGA config after 30 attempts.');
+}
+
+// ──────────────────────────────────────
+// OPA policy management
+// ──────────────────────────────────────
+
 function readCurrentPolicy() {
     try {
         return fs.readFileSync(POLICY_PATH, 'utf8');
@@ -24,7 +69,6 @@ function readCurrentPolicy() {
     }
 }
 
-// Build the system prompt for rule generation with full OPA context
 function buildGeneratePrompt(currentPolicy) {
     return `You are an expert in OPA Rego policy writing for an Envoy external authorization system.
 
@@ -46,6 +90,8 @@ The policy uses PER-PATH authorization. Each path has its own "authorized if" ru
 - "/callback" → any authenticated user
 - "/api/health" → any authenticated user
 - "/api/protected" → has its own rule (see current policy)
+- "/animals" → any authenticated user
+- "/api/animals/*" → any authenticated user
 
 To RESTRICT a path (e.g., "only alice can access /api/protected"), you must REPLACE
 the existing rule for that path with a more restrictive one. Set "replaces" in your
@@ -147,7 +193,6 @@ app.post('/api/generate-rule', async (req, res) => {
         const response = await result.response;
         const text = response.text();
 
-        // Extract JSON from response (handle possible markdown fences)
         const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '');
         const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
@@ -172,7 +217,20 @@ app.get('/api/rules/opa', (req, res) => {
 });
 
 app.get('/api/rules/openfga', async (req, res) => {
-    res.json({ content: "// OpenFGA Model (Mock)\ntype user\ntype document\n  relations\n    define viewer: [user]\n    define editor: [user]" });
+    if (!fgaReady) {
+        return res.json({ content: "// OpenFGA not initialized yet" });
+    }
+    try {
+        const result = await axios.get(`${OPENFGA_URL}/stores/${fgaStoreId}/authorization-models`);
+        const models = result.data.authorization_models || [];
+        if (models.length > 0) {
+            res.json({ content: JSON.stringify(models[0], null, 2) });
+        } else {
+            res.json({ content: "// No authorization models found" });
+        }
+    } catch (e) {
+        res.json({ content: `// Error fetching model: ${e.message}` });
+    }
 });
 
 // Forbidden patterns that would break the policy
@@ -192,7 +250,6 @@ app.post('/api/apply-policy', async (req, res) => {
         return res.status(400).json({ success: false, error: "No policy code provided" });
     }
 
-    // Validate: check for forbidden patterns
     for (const pattern of FORBIDDEN_PATTERNS) {
         if (pattern.test(code)) {
             return res.status(400).json({
@@ -202,7 +259,6 @@ app.post('/api/apply-policy', async (req, res) => {
         }
     }
 
-    // Validate: must contain at least one meaningful rule
     const hasRule = /\b(authorized|is_public_path|is_\w+)\s+if\s*\{/.test(code);
     if (!hasRule) {
         return res.status(400).json({
@@ -221,10 +277,8 @@ app.post('/api/apply-policy', async (req, res) => {
         let updatedPolicy;
 
         if (replaces && replaces.trim()) {
-            // REPLACE mode: find and replace the existing rule
             const replaceText = replaces.trim();
             if (!currentPolicy.includes(replaceText)) {
-                // Try a more lenient match: normalize whitespace
                 const normalizeWs = (s) => s.replace(/\s+/g, ' ').trim();
                 const normalizedPolicy = normalizeWs(currentPolicy);
                 const normalizedReplace = normalizeWs(replaceText);
@@ -236,7 +290,6 @@ app.post('/api/apply-policy', async (req, res) => {
                     });
                 }
 
-                // Find the original text using line-by-line matching
                 const replaceLines = replaceText.split('\n').map(l => l.trim()).filter(l => l);
                 const policyLines = currentPolicy.split('\n');
                 let startIdx = -1;
@@ -270,22 +323,17 @@ app.post('/api/apply-policy', async (req, res) => {
                     });
                 }
             } else {
-                // Exact match found — direct replacement
                 updatedPolicy = currentPolicy.replace(replaceText, trimmedCode);
             }
         } else {
-            // APPEND mode: add to the end
             updatedPolicy = currentPolicy.trimEnd() + '\n\n' + trimmedCode + '\n';
         }
 
-        // Write the updated policy
         fs.writeFileSync(POLICY_PATH, updatedPolicy, 'utf8');
 
         const mode = (replaces && replaces.trim()) ? "replaced" : "appended";
         console.log(`Policy ${mode} successfully. Pushing to OPA...`);
 
-        // Push the updated policy to OPA via its REST API
-        // (file watching doesn't work reliably in container volume mounts)
         const OPA_URL = process.env.OPA_URL || 'http://opa:8181';
         try {
             await axios.put(`${OPA_URL}/v1/policies/policy.rego`, updatedPolicy, {
@@ -332,7 +380,312 @@ app.post('/api/chat', async (req, res) => {
     }
 });
 
-// Push the current policy to OPA on startup (with retries for OPA readiness)
+// ──────────────────────────────────────
+// Explain AuthZ endpoint (called from Animals page)
+// ──────────────────────────────────────
+
+app.post('/api/explain-authz', async (req, res) => {
+    const { user, denied, deniedPath, reason, visibleAnimals, friends, myAnimalsCount, sharedAnimalsCount } = req.body;
+    if (!user) {
+        return res.status(400).json({ error: 'user is required' });
+    }
+
+    try {
+        // Gather context
+        const opaPolicy = readCurrentPolicy() || 'Policy not available';
+
+        let fgaModel = 'Not available';
+        let allTuples = [];
+        let userTuples = [];
+
+        if (fgaReady) {
+            try {
+                const modelRes = await axios.get(`${OPENFGA_URL}/stores/${fgaStoreId}/authorization-models/${fgaModelId}`);
+                fgaModel = JSON.stringify(modelRes.data, null, 2);
+            } catch (e) {
+                fgaModel = `Error fetching model: ${e.message}`;
+            }
+
+            try {
+                const allRes = await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/read`, {});
+                allTuples = (allRes.data.tuples || []).map(t => t.key);
+            } catch (e) { /* ignore */ }
+
+            try {
+                const userRes = await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/read`, {
+                    tuple_key: { user: `user:${user}` }
+                });
+                userTuples = (userRes.data.tuples || []).map(t => t.key);
+            } catch (e) { /* ignore */ }
+        }
+
+        let taskPrompt;
+        if (denied) {
+            taskPrompt = `=== SITUATION: ACCESS DENIED ===
+- Username: ${user}
+- Denied path: ${deniedPath}
+- Denial reason: ${reason}
+
+=== YOUR TASK ===
+The user was DENIED access. Respond with EXACTLY 3 short sections using these headers. Be brief and direct — no filler text.
+
+## Quick Explanation
+One or two sentences max. Say what happened: who was denied, what path, and the one-line reason why.
+
+## Step-by-Step: Rules That Blocked You
+Walk through the relevant OPA rules for this path. Show which rule controls "${deniedPath}", what condition failed (e.g. username check), and quote the specific rule as a short code block. If OpenFGA is also relevant, mention it briefly.
+
+## How to Fix It
+One short paragraph: what specific change is needed (e.g. "add alice to the allowed users" or "add a new authorized rule"). Mention they can do this in the AuthZ Rule Builder.
+
+IMPORTANT: Keep the ENTIRE response under 250 words. No introductions, no conclusions, no redundant text. Use bullet points and code blocks for clarity.`;
+        } else {
+            taskPrompt = `=== SITUATION: ACCESS GRANTED ===
+- Username: ${user}
+- Visible animals: ${JSON.stringify(visibleAnimals || [])}
+- Friends: ${JSON.stringify(friends || [])}
+- My animals count: ${myAnimalsCount || 0}
+- Shared animals count: ${sharedAnimalsCount || 0}
+
+=== YOUR TASK ===
+Explain in clear, friendly language:
+1. How OPA granted this user access (which policy rule matched)
+2. How OpenFGA determines which animals this user can see
+3. Specifically why this user sees the animals they see (trace through the tuples)
+4. What the user could do to see more animals or gain edit access
+
+Keep it concise but thorough. Use markdown with headers and bullet points.
+Address the user directly ("You can see..." not "The user can see...").`;
+        }
+
+        const systemPrompt = `You are an authorization explainer for a demo application that uses a TWO-LAYER authorization system.
+
+=== LAYER 1: OPA (Open Policy Agent) ===
+OPA handles coarse-grained, path-level authorization via Envoy external authorization.
+It evaluates whether a user can access an HTTP path based on JWT token claims (username, roles).
+
+Current OPA Policy:
+\`\`\`rego
+${opaPolicy}
+\`\`\`
+
+=== LAYER 2: OpenFGA (Fine-Grained ReBAC) ===
+OpenFGA handles relationship-based access control for the Animals feature.
+It determines which animals a user can view or edit based on ownership, friendships, and relations.
+
+Current OpenFGA Model:
+${fgaModel}
+
+All Tuples in the System:
+${JSON.stringify(allTuples, null, 2)}
+
+Tuples Involving This User (user:${user}):
+${JSON.stringify(userTuples, null, 2)}
+
+${taskPrompt}`;
+
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const result = await model.generateContent(systemPrompt);
+        const response = await result.response;
+        const explanation = response.text();
+
+        res.json({ explanation });
+    } catch (error) {
+        console.error('Explain authz error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ──────────────────────────────────────
+// OpenFGA debug/management endpoints
+// ──────────────────────────────────────
+
+app.get('/api/openfga/status', (req, res) => {
+    res.json({ ready: fgaReady, storeId: fgaStoreId, modelId: fgaModelId });
+});
+
+app.get('/api/openfga/tuples', async (req, res) => {
+    if (!fgaReady) return res.status(503).json({ error: 'OpenFGA not ready' });
+    try {
+        const body = {};
+        const { user, relation, object } = req.query;
+        if (user || relation || object) {
+            body.tuple_key = {};
+            if (user) body.tuple_key.user = user;
+            if (relation) body.tuple_key.relation = relation;
+            if (object) body.tuple_key.object = object;
+        }
+        const result = await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/read`, body);
+        const tuples = (result.data.tuples || []).map(t => t.key);
+        res.json({ tuples });
+    } catch (e) {
+        res.status(500).json({ error: e.response?.data?.message || e.message });
+    }
+});
+
+app.post('/api/openfga/tuples', async (req, res) => {
+    if (!fgaReady) return res.status(503).json({ error: 'OpenFGA not ready' });
+    const { user, relation, object } = req.body;
+    if (!user || !relation || !object) {
+        return res.status(400).json({ error: 'user, relation, and object are required' });
+    }
+    try {
+        await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/write`, {
+            writes: { tuple_keys: [{ user, relation, object }] }
+        });
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.response?.data?.message || e.message });
+    }
+});
+
+app.delete('/api/openfga/tuples', async (req, res) => {
+    if (!fgaReady) return res.status(503).json({ error: 'OpenFGA not ready' });
+    const { user, relation, object } = req.body;
+    if (!user || !relation || !object) {
+        return res.status(400).json({ error: 'user, relation, and object are required' });
+    }
+    try {
+        await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/write`, {
+            deletes: { tuple_keys: [{ user, relation, object }] }
+        });
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.response?.data?.message || e.message });
+    }
+});
+
+app.get('/api/openfga/model', async (req, res) => {
+    if (!fgaReady) return res.status(503).json({ error: 'OpenFGA not ready' });
+    try {
+        const result = await axios.get(`${OPENFGA_URL}/stores/${fgaStoreId}/authorization-models/${fgaModelId}`);
+        res.json(result.data);
+    } catch (e) {
+        res.status(500).json({ error: e.response?.data?.message || e.message });
+    }
+});
+
+app.get('/api/openfga/check', async (req, res) => {
+    if (!fgaReady) return res.status(503).json({ error: 'OpenFGA not ready' });
+    const { user, relation, object } = req.query;
+    if (!user || !relation || !object) {
+        return res.status(400).json({ error: 'user, relation, and object query params are required' });
+    }
+    try {
+        const result = await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/check`, {
+            tuple_key: { user, relation, object },
+            authorization_model_id: fgaModelId
+        });
+        res.json({ allowed: result.data.allowed === true, resolution: result.data.resolution });
+    } catch (e) {
+        res.status(500).json({ error: e.response?.data?.message || e.message });
+    }
+});
+
+// ──────────────────────────────────────
+// Visualization: OPA policy parser
+// ──────────────────────────────────────
+
+app.get('/api/visualize/opa', (req, res) => {
+    const policy = readCurrentPolicy();
+    if (!policy) {
+        return res.status(500).json({ error: 'Could not read policy file' });
+    }
+
+    try {
+        const publicPaths = [];
+        const rules = [];
+
+        const lines = policy.split('\n');
+        let i = 0;
+
+        while (i < lines.length) {
+            const line = lines[i];
+
+            // Match is_public_path blocks
+            if (/^\s*is_public_path\s+if\s*\{/.test(line)) {
+                const block = extractBlock(lines, i);
+                const startMatch = block.body.match(/startswith\s*\(\s*http_request\.path\s*,\s*"([^"]+)"\s*\)/);
+                if (startMatch) {
+                    publicPaths.push(startMatch[1]);
+                }
+                i = block.endLine + 1;
+                continue;
+            }
+
+            // Match authorized if blocks
+            if (/^\s*authorized\s+if\s*\{/.test(line)) {
+                const block = extractBlock(lines, i);
+                const body = block.body;
+
+                // Extract path condition
+                const exactMatch = body.match(/http_request\.path\s*==\s*"([^"]+)"/);
+                const prefixMatch = body.match(/startswith\s*\(\s*http_request\.path\s*,\s*"([^"]+)"\s*\)/);
+                const path = exactMatch ? exactMatch[1] : (prefixMatch ? prefixMatch[1] + '*' : null);
+                const matchType = exactMatch ? 'exact' : (prefixMatch ? 'prefix' : 'unknown');
+
+                // Extract condition
+                let condition = 'authenticated';
+                const userMatch = body.match(/token_payload\.preferred_username\s*==\s*"([^"]+)"/);
+                const roleMatch = body.match(/role\s*==\s*"([^"]+)"/);
+                const helperMatch = body.match(/\b(is_\w+)\b/);
+
+                if (userMatch) {
+                    condition = `user="${userMatch[1]}"`;
+                } else if (roleMatch) {
+                    condition = `role="${roleMatch[1]}"`;
+                } else if (helperMatch && helperMatch[1] !== 'is_public_path') {
+                    condition = helperMatch[1];
+                }
+
+                if (path) {
+                    // Extract comment from line above the block
+                    let comment = '';
+                    if (block.startLine > 0) {
+                        const prevLine = lines[block.startLine - 1];
+                        const commentMatch = prevLine.match(/^#\s*(.+)/);
+                        if (commentMatch) comment = commentMatch[1].trim();
+                    }
+                    rules.push({ path, condition, type: matchType, comment });
+                }
+
+                i = block.endLine + 1;
+                continue;
+            }
+
+            i++;
+        }
+
+        res.json({ publicPaths, rules });
+    } catch (err) {
+        console.error('OPA viz parse error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+function extractBlock(lines, startLine) {
+    let depth = 0;
+    let body = '';
+    let started = false;
+    let endLine = startLine;
+
+    for (let i = startLine; i < lines.length; i++) {
+        const line = lines[i];
+        for (const ch of line) {
+            if (ch === '{') { depth++; started = true; }
+            if (ch === '}') { depth--; }
+        }
+        body += line + '\n';
+        if (started && depth === 0) {
+            endLine = i;
+            break;
+        }
+    }
+
+    return { body, startLine, endLine };
+}
+
+// Push the current policy to OPA on startup
 async function pushPolicyToOPA() {
     const OPA_URL = process.env.OPA_URL || 'http://opa:8181';
     const policy = readCurrentPolicy();
@@ -359,4 +712,5 @@ async function pushPolicyToOPA() {
 app.listen(port, () => {
     console.log(`AI Manager listening on port ${port}`);
     pushPolicyToOPA();
+    loadFGAConfig();
 });

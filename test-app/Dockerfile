@@ -6,4 +6,5 @@ RUN go build -o server main.go
 FROM alpine:latest
 WORKDIR /app
 COPY --from=builder /app/server .
+RUN mkdir -p /data /shared
 CMD ["./server"]

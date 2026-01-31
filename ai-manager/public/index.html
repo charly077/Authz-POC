@@ -7,6 +7,11 @@
     <title>AuthZ AI Manager</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+        window.mermaid = mermaid;
+    </script>
 </head>
 
 <body>
@@ -17,8 +22,10 @@
         </header>
 
         <div class="tabs">
-            <button class="tab-btn active" data-tab="generate">✨ Generate Rules</button>
-            <button class="tab-btn" data-tab="chat">💬 View & Chat</button>
+            <button class="tab-btn active" data-tab="generate">Generate Rules</button>
+            <button class="tab-btn" data-tab="chat">View & Chat</button>
+            <button class="tab-btn" data-tab="openfga">OpenFGA Manager</button>
+            <button class="tab-btn" data-tab="visualize">Visualization</button>
         </div>
 
         <main id="generate" class="tab-content active">
@@ -27,7 +34,7 @@
                 <textarea id="promptInput"
                     placeholder="e.g., Allow editors to view documents they created..."></textarea>
                 <div class="actions">
-                    <button id="generateBtn" class="primary-btn">Generate Rule <span class="icon">✨</span></button>
+                    <button id="generateBtn" class="primary-btn">Generate Rule</button>
                 </div>
             </div>
 
@@ -62,6 +69,107 @@
                         <button id="sendChatBtn" class="primary-btn">Send</button>
                     </div>
                 </div>
+            </div>
+        </main>
+
+        <main id="openfga" class="tab-content">
+            <div class="fga-status card" id="fgaStatus">
+                <h3>OpenFGA Status</h3>
+                <p id="fgaStatusText">Checking...</p>
+            </div>
+
+            <div class="card">
+                <h3>Tuples</h3>
+                <div class="fga-filter-row">
+                    <input type="text" id="filterUser" placeholder="Filter by user (e.g. user:alice)">
+                    <input type="text" id="filterRelation" placeholder="Filter by relation">
+                    <input type="text" id="filterObject" placeholder="Filter by object">
+                    <button class="secondary-btn" id="filterTuplesBtn">Filter</button>
+                    <button class="secondary-btn" id="refreshTuplesBtn">Refresh</button>
+                </div>
+                <table class="fga-table" id="tuplesTable">
+                    <thead><tr><th>User</th><th>Relation</th><th>Object</th><th></th></tr></thead>
+                    <tbody id="tuplesBody"></tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h3>Add Tuple</h3>
+                <div class="fga-add-row">
+                    <input type="text" id="addUser" placeholder="user:alice">
+                    <input type="text" id="addRelation" placeholder="owner">
+                    <input type="text" id="addObject" placeholder="animal:abc123">
+                    <button class="primary-btn" id="addTupleBtn">Add</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Check Authorization</h3>
+                <div class="fga-add-row">
+                    <input type="text" id="checkUser" placeholder="user:alice">
+                    <input type="text" id="checkRelation" placeholder="viewer">
+                    <input type="text" id="checkObject" placeholder="animal:abc123">
+                    <button class="primary-btn" id="checkBtn">Check</button>
+                </div>
+                <div id="checkResult" class="fga-check-result"></div>
+            </div>
+
+            <div class="card">
+                <h3>Authorization Model</h3>
+                <pre><code id="fgaModelContent">Loading...</code></pre>
+                <button class="secondary-btn" id="refreshModelBtn" style="margin-top: 0.75rem;">Refresh Model</button>
+            </div>
+        </main>
+        <main id="visualize" class="tab-content">
+            <div class="card">
+                <div class="viz-header">
+                    <h2>Architecture Overview</h2>
+                    <button class="secondary-btn small-btn" id="refreshArchBtn">Refresh</button>
+                </div>
+                <div class="mermaid-container" id="archContainer"></div>
+                <div class="arch-explanation">
+                    <p>This system uses a <strong>two-layer authorization</strong> architecture to secure every request.</p>
+                    <div class="arch-grid">
+                        <div class="arch-item">
+                            <h4>Envoy Proxy</h4>
+                            <p>Sits in front of the application as a reverse proxy and acts as the single enforcement point. It runs two filters in sequence: first, the <strong>OAuth2 filter</strong> checks if the request carries a valid token — if not, it redirects the browser to Keycloak for login and handles the token exchange on <code>/callback</code>. Then the <strong>ext_authz filter</strong> sends every authenticated request to OPA for policy evaluation. The app never sees unauthenticated or unauthorized traffic.</p>
+                        </div>
+                        <div class="arch-item">
+                            <h4>Keycloak (IdP)</h4>
+                            <p>Identity Provider that manages user accounts, login screens, and role assignments. Envoy redirects unauthenticated users here for OIDC login. After the user authenticates, Keycloak issues a JWT token containing claims (username, roles, email) that Envoy forwards with every subsequent request.</p>
+                        </div>
+                        <div class="arch-item">
+                            <h4>OPA (Open Policy Agent)</h4>
+                            <p>Handles <strong>coarse-grained, path-level</strong> authorization. Envoy sends each request to OPA via gRPC ext_authz. OPA evaluates Rego policies against the URL path, HTTP method, and JWT claims to decide allow or deny. Answers: <em>"Can this user access this endpoint?"</em></p>
+                        </div>
+                        <div class="arch-item">
+                            <h4>OpenFGA</h4>
+                            <p>Handles <strong>fine-grained, relationship-based</strong> access control (ReBAC). Called by the application (not Envoy) to check per-object permissions. Models ownership, friendship, and sharing relationships between users and resources. Answers: <em>"Can this user view/edit this specific object?"</em></p>
+                        </div>
+                    </div>
+                    <div class="arch-item arch-comparison">
+                        <h4>OPA vs OpenFGA</h4>
+                        <p><strong>OPA</strong> is policy-based: rules are written in Rego and evaluate request attributes (path, method, token claims). It operates at the <em>API gateway level</em> and knows nothing about individual resources.</p>
+                        <p><strong>OpenFGA</strong> is relationship-based: it stores tuples like <code>user:alice is owner of animal:cat1</code> and evaluates access by traversing the relationship graph. It operates at the <em>application level</em> for per-object decisions.</p>
+                        <p>Together they form a defense-in-depth pattern: OPA gates the door, OpenFGA controls what you see inside.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="viz-header">
+                    <h2>OPA Policy Flow</h2>
+                    <button class="secondary-btn small-btn" id="refreshOpaVizBtn">Refresh</button>
+                </div>
+                <div class="mermaid-container" id="opaVizContainer"></div>
+            </div>
+
+            <div class="card">
+                <div class="viz-header">
+                    <h2>OpenFGA Model &amp; Relations</h2>
+                    <button class="secondary-btn small-btn" id="refreshFgaVizBtn">Refresh</button>
+                </div>
+                <div class="mermaid-container" id="fgaVizContainer"></div>
             </div>
         </main>
     </div>

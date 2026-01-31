@@ -34,7 +34,20 @@ services:
     networks:
       - auth-net
 
-  # Fine-Grained Auth (ReBAC)
+  # Fine-Grained Auth (ReBAC) — migrate schema
+  openfga-migrate:
+    image: openfga/openfga:latest
+    container_name: openfga-migrate
+    command: migrate
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://admin:password@postgres:5432/openfga?sslmode=disable
+    depends_on:
+      - postgres
+    networks:
+      - auth-net
+
+  # Fine-Grained Auth (ReBAC) — run server
   openfga:
     image: openfga/openfga:latest
     container_name: openfga
@@ -47,7 +60,23 @@ services:
     ports:
       - "8081:8080" # HTTP API
       - "8082:8081" # gRPC API
-      - "3000:3000" # Playground
+      - "3001:3000" # Playground
+    networks:
+      - auth-net
+
+  # OpenFGA bootstrap — create store + auth model (runs once)
+  openfga-init:
+    image: node:18-alpine
+    container_name: openfga-init
+    working_dir: /app
+    command: node init.js
+    environment:
+      OPENFGA_URL: http://openfga:8080
+    volumes:
+      - ./infra/openfga/init.js:/app/init.js:ro
+      - openfga_config:/shared
+    depends_on:
+      - openfga
     networks:
       - auth-net
 
@@ -87,17 +116,23 @@ services:
     networks:
       - auth-net
 
-  # Protected Application
+  # Protected Application (Animals demo)
   test-app:
     build:
       context: ./test-app
     container_name: test-app
     environment:
       PORT: 3000
+      OPENFGA_URL: http://openfga:8080
+    volumes:
+      - openfga_config:/shared:ro
+      - test_app_data:/data
+    depends_on:
+      - openfga
     networks:
       - auth-net
 
-  # Business AI Application
+  # AI Authorization Manager (debug & policy management)
   ai-manager:
     build:
       context: ./ai-manager
@@ -106,11 +141,12 @@ services:
       - .env
     environment:
       OPA_URL: http://opa:8181
-      OPENFGA_URL: http://openfga:8081
+      OPENFGA_URL: http://openfga:8080
     ports:
       - "5001:5000"
     volumes:
       - ./opa/policies:/policies
+      - openfga_config:/shared:ro
     networks:
       - auth-net
 
@@ -120,3 +156,5 @@ networks:
 
 volumes:
   postgres_data:
+  openfga_config:
+  test_app_data:
