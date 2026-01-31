@@ -26,7 +26,11 @@ static_resources:
                 route:
                   cluster: keycloak_service
               - match:
-                  prefix: "/manager"
+                  path: "/manager"
+                redirect:
+                  path_redirect: "/manager/"
+              - match:
+                  prefix: "/manager/"
                 route:
                   cluster: ai_manager_service
                   prefix_rewrite: "/"
