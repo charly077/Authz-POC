@@ -75,9 +75,79 @@ graph LR
 *   **AI Manager**: [http://localhost:5001](http://localhost:5001)
     *   Chat with your policies or generate new ones.
 
+## 🖥 Running on Synology NAS
+
+This project can run on a Synology NAS using Docker (Container Manager). The project lives at `/volume1/docker/authz_poc/`.
+
+### Prerequisites
+*   Synology DSM with **Container Manager** (Docker) installed
+*   SSH access enabled on the NAS
+*   Google Gemini API Key (for AI Manager)
+
+### Setup
+
+1.  **Clone the repo** via SSH:
+    ```bash
+    ssh your-nas
+    cd /volume1/docker
+    git clone <repo-url> authz_poc
+    cd authz_poc
+    ```
+
+2.  **Configure environment**:
+    ```bash
+    echo "GEMINI_API_KEY=AIzaSy..." > /volume1/docker/authz_poc/.env
+    ```
+
+3.  **Set the external URL** to your NAS IP or hostname. Edit the `docker-compose.yml` and update the `EXTERNAL_URL` environment variable for both the `envoy` and `test-app` services:
+    ```yaml
+    # In the envoy service:
+    environment:
+      EXTERNAL_URL: http://<NAS_IP>:8000
+
+    # In the test-app service:
+    environment:
+      EXTERNAL_URL: http://<NAS_IP>:8000
+    ```
+    Replace `<NAS_IP>` with your Synology's local IP (e.g., `192.168.1.50`) or hostname.
+
+4.  **Build and start** the stack:
+    ```bash
+    cd /volume1/docker/authz_poc
+    docker compose build
+    docker compose up -d
+    ```
+
+5.  **Update Keycloak redirect URIs** if using a custom hostname or IP. The realm config (`infra/keycloak/realm.json`) already includes `http://localhost:8000/*` in `redirectUris`. Add your NAS URL:
+    ```json
+    "redirectUris": ["http://localhost:8000/*", "http://<NAS_IP>:8000/*"],
+    "webOrigins": ["http://localhost:8000", "http://<NAS_IP>:8000"],
+    ```
+    Then restart Keycloak: `docker compose restart keycloak`
+
+### Synology-specific notes
+
+*   **OPA platform**: The OPA image uses `platform: linux/amd64`. This works on x86 Synology models (DS920+, DS1621+, etc.). ARM-based models (DS220j, etc.) are not supported.
+*   **Port conflicts**: If ports `8000`, `8081`, or `8181` conflict with other services on your NAS, remap them in `docker-compose.yml` under the relevant `ports:` sections.
+*   **Persistence**: Postgres data, OpenFGA config, and app data use Docker named volumes. These survive container restarts and are stored in `/volume1/@docker/volumes/`.
+*   **Firewall**: If the Synology firewall is enabled, allow inbound TCP on port `8000` (or your remapped port) for LAN access.
+*   **Auto-start**: Container Manager automatically restarts containers after a NAS reboot if the restart policy is set. Add `restart: unless-stopped` to each service in `docker-compose.yml` for this behavior.
+*   **Logs**: View logs via Container Manager UI or SSH:
+    ```bash
+    cd /volume1/docker/authz_poc
+    docker compose logs -f envoy
+    docker compose logs -f test-app
+    ```
+
+### Access
+
+*   **Public page**: `http://<NAS_IP>:8000/public`
+*   **Authenticated home**: `http://<NAS_IP>:8000/home` (redirects to Keycloak login)
+*   **AI Manager**: `http://<NAS_IP>:8000/manager`
+
 ## 📂 Project Structure
 *   `envoy/`: Envoy proxy configuration.
 *   `opa/`: OPA configuration and `.rego` policies.
 *   `ai-manager/`: Source code for the AI management interface.
 *   `test-app/`: Source code for the backend service.
-*   `infra/`: Database initialization scripts.
+*   `infra/`: Database initialization scripts and Keycloak theme/realm config.

@@ -712,12 +712,122 @@ const pageTemplate = `<!DOCTYPE html>
             border-color: rgba(139, 92, 246, 0.4);
         }
 
+        /* Section titles */
+        .section-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        /* Prose card */
+        .prose-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            line-height: 1.7;
+            color: var(--text);
+            font-size: 0.95rem;
+        }
+
+        .prose-card p { margin-bottom: 0.75rem; }
+        .prose-card p:last-child { margin-bottom: 0; }
+        .prose-card code {
+            background: rgba(139, 92, 246, 0.12);
+            padding: 0.15rem 0.45rem;
+            border-radius: 5px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.85rem;
+            color: #c4b5fd;
+        }
+        .prose-card a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .prose-card a:hover { text-decoration: underline; }
+
+        /* Two column model cards */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .model-card {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1.25rem;
+        }
+
+        .model-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+        .model-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.4rem; color: var(--accent); }
+        .model-desc { font-size: 0.88rem; color: var(--text-muted); line-height: 1.6; }
+
+        /* Architecture flow */
+        .arch-flow {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .arch-step {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 0.6rem 1rem;
+            font-size: 0.88rem;
+        }
+
+        .arch-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .arch-arrow {
+            color: var(--text-muted);
+            font-size: 1.2rem;
+        }
+
+        /* Steps list */
+        .steps-list {
+            padding-left: 1.5rem;
+            margin: 0;
+        }
+        .steps-list li {
+            margin-bottom: 0.6rem;
+            line-height: 1.6;
+        }
+        .steps-list li:last-child { margin-bottom: 0; }
+
         @media (max-width: 640px) {
             nav { padding: 0.75rem 1rem; flex-wrap: wrap; gap: 0.75rem; }
             .nav-links { display: none; }
             .container { padding: 1.25rem; }
             .info-grid { grid-template-columns: 1fr; }
             .endpoint-desc { display: none; }
+            .two-col { grid-template-columns: 1fr; }
+            .arch-flow { flex-direction: column; }
+            .arch-arrow { transform: rotate(90deg); }
         }
     </style>
 </head>
@@ -822,31 +932,105 @@ const pageTemplate = `<!DOCTYPE html>
 
         {{else if .IsPublic}}
             <div class="page-header">
-                <h1>Public Resource</h1>
-                <p>This content is accessible to everyone without authentication.</p>
+                <h1>Fine-Grained Authorization POC</h1>
+                <p>A proof-of-concept combining <strong>OPA</strong> (policy-based) and <strong>OpenFGA</strong> (relationship-based) authorization, externalized from the application.</p>
             </div>
 
             <div class="decision-box public">
                 <div class="decision-icon">{{.StatusIcon}}</div>
                 <div class="decision-content">
-                    <h3>Public Access &mdash; No Auth Required</h3>
-                    <p>OPA evaluated the request path <code>/public</code> and granted access via the <strong>pass-through rule</strong>. No token validation was performed. Envoy's OAuth2 filter also skips this path.</p>
+                    <h3>You are viewing a public page</h3>
+                    <p>This page is accessible without authentication. OPA evaluated the path <code>/public</code> and granted access via its <strong>pass-through rule</strong>. No token was required.</p>
                 </div>
             </div>
 
+            <div class="section-title">Why this project?</div>
+            <div class="prose-card">
+                <p>Most applications embed authorization logic directly in code &mdash; <code>if user.role == "admin"</code> scattered everywhere. This is fragile, hard to audit, and impossible to manage at scale.</p>
+                <p>This POC explores a better approach: <strong>externalized authorization</strong>. The application never makes access decisions itself. Instead, a dedicated infrastructure layer handles it, combining two complementary models:</p>
+                <div class="two-col">
+                    <div class="model-card">
+                        <div class="model-icon">&#x1F4DC;</div>
+                        <div class="model-name">OPA &mdash; Policy-Based (ABAC)</div>
+                        <div class="model-desc">Open Policy Agent evaluates <strong>attributes</strong>: request path, HTTP method, JWT claims, time of day, IP ranges. Policies are written in Rego and enforced at the gateway level by Envoy.</div>
+                    </div>
+                    <div class="model-card">
+                        <div class="model-icon">&#x1F517;</div>
+                        <div class="model-name">OpenFGA &mdash; Relationship-Based (ReBAC)</div>
+                        <div class="model-desc">OpenFGA stores <strong>relationships</strong> between users and resources: &ldquo;Alice is owner of Cat&rdquo;, &ldquo;Bob is friend of Alice&rdquo;. Access is derived from the relationship graph, enabling fine-grained sharing.</div>
+                    </div>
+                </div>
+                <p>Together, OPA handles the <em>&ldquo;can this user access this endpoint?&rdquo;</em> question, while OpenFGA answers <em>&ldquo;can this user see or edit this specific resource?&rdquo;</em></p>
+            </div>
+
+            <div class="section-title">Architecture</div>
+            <div class="prose-card">
+                <div class="arch-flow">
+                    <div class="arch-step"><span class="arch-num">1</span><strong>Envoy Proxy</strong> intercepts every request</div>
+                    <div class="arch-arrow">&rarr;</div>
+                    <div class="arch-step"><span class="arch-num">2</span><strong>Keycloak</strong> authenticates the user (OIDC)</div>
+                    <div class="arch-arrow">&rarr;</div>
+                    <div class="arch-step"><span class="arch-num">3</span><strong>OPA</strong> evaluates the policy (allow/deny)</div>
+                    <div class="arch-arrow">&rarr;</div>
+                    <div class="arch-step"><span class="arch-num">4</span><strong>App</strong> queries <strong>OpenFGA</strong> for resource-level access</div>
+                </div>
+                <p style="margin-top: 1rem;">The application code is completely free of authorization logic. It receives pre-validated identity headers from OPA and delegates relationship checks to OpenFGA.</p>
+            </div>
+
+            <div class="section-title">Try it out</div>
+            <div class="endpoint-list">
+                <a href="/home" class="endpoint-item">
+                    <span class="endpoint-method">GET</span>
+                    <span class="endpoint-path">/home</span>
+                    <span class="endpoint-desc">Authenticated dashboard &mdash; sign in with Keycloak</span>
+                    <span class="endpoint-lock">&#x1F512;</span>
+                </a>
+                <a href="/animals" class="endpoint-item">
+                    <span class="endpoint-method">GET</span>
+                    <span class="endpoint-path">/animals</span>
+                    <span class="endpoint-desc">Animals demo &mdash; OpenFGA relationships in action</span>
+                    <span class="endpoint-lock">&#x1F512;</span>
+                </a>
+                <a href="/api/protected" class="endpoint-item">
+                    <span class="endpoint-method">GET</span>
+                    <span class="endpoint-path">/api/protected</span>
+                    <span class="endpoint-desc">Protected API &mdash; requires a valid Bearer token</span>
+                    <span class="endpoint-lock">&#x1F512;</span>
+                </a>
+                <a href="/manager" class="endpoint-item" target="_blank">
+                    <span class="endpoint-method">UI</span>
+                    <span class="endpoint-path">/manager</span>
+                    <span class="endpoint-desc">AI-powered rule builder (Gemini)</span>
+                    <span class="endpoint-lock">&#x2728;</span>
+                </a>
+            </div>
+
+            <div class="section-title" style="margin-top: 2rem;">Demo credentials</div>
             <div class="info-grid">
                 <div class="info-card">
-                    <div class="info-card-label">OPA Decision</div>
-                    <div class="info-card-value mono">{{.Decision}}</div>
+                    <div class="info-card-label">User 1</div>
+                    <div class="info-card-value">alice / alice</div>
                 </div>
                 <div class="info-card">
-                    <div class="info-card-label">Path</div>
-                    <div class="info-card-value mono">{{.Path}}</div>
+                    <div class="info-card-label">User 2</div>
+                    <div class="info-card-value">bob / bob</div>
                 </div>
                 <div class="info-card">
-                    <div class="info-card-label">Server Time</div>
-                    <div class="info-card-value mono">{{.Time}}</div>
+                    <div class="info-card-label">Keycloak Admin</div>
+                    <div class="info-card-value">admin / admin</div>
                 </div>
+            </div>
+
+            <div class="section-title" style="margin-top: 2rem;">How to test</div>
+            <div class="prose-card">
+                <ol class="steps-list">
+                    <li><strong>Sign in</strong> &mdash; Go to <a href="/home">/home</a> and log in as <code>alice</code>. You will be redirected to Keycloak, then back to the app with your identity verified.</li>
+                    <li><strong>Create animals</strong> &mdash; On the <a href="/animals">/animals</a> page, create a few animals. You are automatically the <em>owner</em> (stored as an OpenFGA relationship).</li>
+                    <li><strong>Add a friend</strong> &mdash; Send a friend request to <code>bob</code>. Then sign in as <code>bob</code> in another browser to accept it.</li>
+                    <li><strong>Share access</strong> &mdash; Back as <code>alice</code>, assign <code>bob</code> as <em>editor</em> or <em>viewer</em> on one of your animals. This writes a relationship tuple to OpenFGA.</li>
+                    <li><strong>Verify as Bob</strong> &mdash; Sign in as <code>bob</code> and check the <em>Shared With Me</em> section. Bob can now see (and possibly edit) Alice's animal &mdash; determined entirely by the OpenFGA relationship graph.</li>
+                    <li><strong>Explore policies</strong> &mdash; Use the <a href="/manager" target="_blank">AI Manager</a> to inspect, modify, or generate OPA policies using natural language.</li>
+                </ol>
             </div>
 
         {{else}}
