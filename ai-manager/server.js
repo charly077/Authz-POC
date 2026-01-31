@@ -11,9 +11,16 @@ const port = 5000;
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
-// CORS for test-app at :8000
+// CORS — allow both local dev and production origins
+const ALLOWED_ORIGINS = new Set([
+    'http://localhost:8000',
+    'https://authz.digiprotect.be'
+]);
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', 'https://authz.digiprotect.be');
+    const origin = req.headers.origin;
+    if (ALLOWED_ORIGINS.has(origin)) {
+        res.header('Access-Control-Allow-Origin', origin);
+    }
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type');
     if (req.method === 'OPTIONS') {

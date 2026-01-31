@@ -62,8 +62,8 @@ static_resources:
                   cluster: keycloak_service
                   uri: http://keycloak:8080/realms/myrealm/protocol/openid-connect/token
                   timeout: 3s
-                authorization_endpoint: https://authz.digiprotect.be/realms/myrealm/protocol/openid-connect/auth
-                redirect_uri: "https://authz.digiprotect.be/callback"
+                authorization_endpoint: __EXTERNAL_URL__/realms/myrealm/protocol/openid-connect/auth
+                redirect_uri: "__EXTERNAL_URL__/callback"
                 redirect_path_matcher:
                   path:
                     exact: /callback

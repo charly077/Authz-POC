@@ -100,15 +100,20 @@ services:
   # Reverse Proxy
   envoy:
     image: envoyproxy/envoy:v1.26-latest
-    entrypoint: /usr/local/bin/envoy
-    command: -c /etc/envoy/envoy.yaml
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sed "s|__EXTERNAL_URL__|$$EXTERNAL_URL|g" /etc/envoy/envoy.yaml.tmpl > /tmp/envoy.yaml
+        /usr/local/bin/envoy -c /tmp/envoy.yaml
     container_name: envoy
     enable_ipv6: false
+    environment:
+      EXTERNAL_URL: ${EXTERNAL_URL:-http://localhost:8000}
     ports:
       - "8000:8000" # Public entry point
       - "9901:9901" # Admin interface
     volumes:
-      - ./envoy/envoy.yaml:/etc/envoy/envoy.yaml
+      - ./envoy/envoy.yaml:/etc/envoy/envoy.yaml.tmpl
       - ./envoy/token_secret.yaml:/etc/envoy/token_secret.yaml
       - ./envoy/hmac_secret.yaml:/etc/envoy/hmac_secret.yaml
     networks:
@@ -122,6 +127,7 @@ services:
     environment:
       PORT: 3000
       OPENFGA_URL: http://openfga:8080
+      EXTERNAL_URL: ${EXTERNAL_URL:-http://localhost:8000}
     volumes:
       - openfga_config:/shared:ro
       - test_app_data:/data

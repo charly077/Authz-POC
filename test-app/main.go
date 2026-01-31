@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,7 @@ import (
 )
 
 var startTime = time.Now()
+var externalURL string
 
 // ──────────────────────────────────────
 // OpenFGA config + helpers
@@ -1864,6 +1866,10 @@ func main() {
 	if port == "" {
 		port = "3000"
 	}
+	externalURL = os.Getenv("EXTERNAL_URL")
+	if externalURL == "" {
+		externalURL = "http://localhost:8000"
+	}
 	openfgaURL = os.Getenv("OPENFGA_URL")
 	if openfgaURL == "" {
 		openfgaURL = "http://openfga:8080"
@@ -1885,9 +1891,9 @@ func main() {
 	})
 
 	http.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		keycloakLogout := "https://authz.digiprotect.be/realms/myrealm/protocol/openid-connect/logout" +
+		keycloakLogout := externalURL + "/realms/myrealm/protocol/openid-connect/logout" +
 			"?client_id=envoy" +
-			"&post_logout_redirect_uri=https%3A%2F%2Fauthz.digiprotect.be%2Fsignout"
+			"&post_logout_redirect_uri=" + url.QueryEscape(externalURL+"/signout")
 		http.Redirect(w, r, keycloakLogout, http.StatusFound)
 	})
 

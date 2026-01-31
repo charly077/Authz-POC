@@ -21,10 +21,10 @@
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": true,
       "standardFlowEnabled": true,
-      "redirectUris": ["https://authz.digiprotect.be/*"],
-      "webOrigins": ["https://authz.digiprotect.be"],
+      "redirectUris": ["http://localhost:8000/*", "https://authz.digiprotect.be/*"],
+      "webOrigins": ["http://localhost:8000", "https://authz.digiprotect.be"],
       "attributes": {
-        "post.logout.redirect.uris": "https://authz.digiprotect.be/*"
+        "post.logout.redirect.uris": "http://localhost:8000/*##https://authz.digiprotect.be/*"
       }
     }
   ],
