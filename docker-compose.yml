@@ -92,7 +92,7 @@ services:
       - "--log-level=debug"
       - "--config-file=/config/opa-config.yaml"
     volumes:
-      - ./opa/config.yaml:/config/opa-config.yaml
+      - ./infra/opa/config.yaml:/config/opa-config.yaml
     ports:
       - "8181:8181"
       - "9191:9191"
@@ -115,9 +115,9 @@ services:
       - "8000:8000" # Public entry point
       - "9901:9901" # Admin interface
     volumes:
-      - ./envoy/envoy.yaml:/etc/envoy/envoy.yaml.tmpl
-      - ./envoy/token_secret.yaml:/etc/envoy/token_secret.yaml
-      - ./envoy/hmac_secret.yaml:/etc/envoy/hmac_secret.yaml
+      - ./infra/envoy/envoy.yaml:/etc/envoy/envoy.yaml.tmpl
+      - ./infra/envoy/token_secret.yaml:/etc/envoy/token_secret.yaml
+      - ./infra/envoy/hmac_secret.yaml:/etc/envoy/hmac_secret.yaml
     networks:
       - auth-net
 
@@ -149,7 +149,7 @@ services:
       OPA_URL: http://opa:8181
       OPENFGA_URL: http://openfga:8080
     volumes:
-      - ./opa/policies:/policies
+      - ./infra/opa/policies:/policies
       - openfga_config:/shared:ro
     networks:
       - auth-net

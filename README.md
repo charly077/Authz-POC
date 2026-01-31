@@ -146,8 +146,9 @@ This project can run on a Synology NAS using Docker (Container Manager). The pro
 *   **AI Manager**: `http://<NAS_IP>:8000/manager`
 
 ## 📂 Project Structure
-*   `envoy/`: Envoy proxy configuration.
-*   `opa/`: OPA configuration and `.rego` policies.
+*   `infra/envoy/`: Envoy proxy configuration.
+*   `infra/opa/`: OPA configuration and `.rego` policies.
+*   `infra/keycloak/`: Keycloak realm config and custom login theme.
+*   `infra/postgres/`: Database initialization scripts.
 *   `ai-manager/`: Source code for the AI management interface.
 *   `test-app/`: Source code for the backend service.
-*   `infra/`: Database initialization scripts and Keycloak theme/realm config.
