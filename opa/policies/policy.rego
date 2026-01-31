@@ -84,7 +84,7 @@ allow = response if {
         <div class="user-path">User: <strong>%s</strong> &middot; Path: <strong>%s</strong></div>
         <div class="buttons">
             <button class="btn btn-ai" id="aiBtn" onclick="explainAccess()">Explain with AI</button>
-            <a href="http://localhost:5001" target="_blank" class="btn btn-rule">Modify Rules in AuthZ Rule Builder &rarr;</a>
+            <a href="/manager" target="_blank" class="btn btn-rule">Modify Rules in AuthZ Rule Builder &rarr;</a>
             <a href="/" class="btn btn-home">Go Home</a>
         </div>
         <div id="aiResult"></div>
@@ -120,7 +120,7 @@ allow = response if {
         btn.innerHTML = "<span class=\"spinner\"></span>Analyzing...";
         res.style.display = "block";
         res.innerHTML = "<p style=\"color:#94a3b8\">Asking AI to explain why access was denied...</p>";
-        fetch("http://localhost:5001/api/explain-authz", {
+        fetch("/manager/api/explain-authz", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({user: _u, deniedPath: _p, reason: _r, denied: true})
@@ -160,6 +160,10 @@ is_public_path if {
 
 is_public_path if {
     startswith(http_request.path, "/logout")
+}
+
+is_public_path if {
+    startswith(http_request.path, "/manager")
 }
 
 # Home page and callback — any authenticated user can access

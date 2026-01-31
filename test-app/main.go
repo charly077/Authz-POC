@@ -901,7 +901,7 @@ const pageTemplate = `<!DOCTYPE html>
         <a href="https://www.openpolicyagent.org/">OPA</a>,
         <a href="https://www.keycloak.org/">Keycloak</a> &amp;
         <a href="https://openfga.dev/">OpenFGA</a></span>
-        <a href="http://localhost:5001" class="btn-rule-builder" target="_blank">Go to AuthZ Rule Builder &#8594;</a>
+        <a href="/manager" class="btn-rule-builder" target="_blank">Go to AuthZ Rule Builder &#8594;</a>
     </footer>
 </body>
 </html>`
@@ -1135,7 +1135,7 @@ const animalsPageTemplate = `<!DOCTYPE html>
 
     <footer>
         <span>Fine-Grained Authorization POC</span>
-        <a href="http://localhost:5001" target="_blank">AuthZ Rule Builder &rarr;</a>
+        <a href="/manager" target="_blank">AuthZ Rule Builder &rarr;</a>
     </footer>
 
     <script>
@@ -1415,7 +1415,7 @@ const animalsPageTemplate = `<!DOCTYPE html>
             const sharedAnimals = allAnimals.filter(a => a.owner !== currentUser);
             const friends = friendsData.friends || [];
 
-            const res = await fetch('http://localhost:5001/api/explain-authz', {
+            const res = await fetch('/manager/api/explain-authz', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1885,9 +1885,9 @@ func main() {
 	})
 
 	http.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		keycloakLogout := "http://localhost:8080/realms/myrealm/protocol/openid-connect/logout" +
+		keycloakLogout := "https://authz.digiprotect.be/realms/myrealm/protocol/openid-connect/logout" +
 			"?client_id=envoy" +
-			"&post_logout_redirect_uri=http%3A%2F%2Flocalhost%3A8000%2Fsignout"
+			"&post_logout_redirect_uri=https%3A%2F%2Fauthz.digiprotect.be%2Fsignout"
 		http.Redirect(w, r, keycloakLogout, http.StatusFound)
 	})
 

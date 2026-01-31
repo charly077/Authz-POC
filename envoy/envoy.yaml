@@ -26,6 +26,15 @@ static_resources:
                 route:
                   cluster: keycloak_service
               - match:
+                  prefix: "/realms"
+                route:
+                  cluster: keycloak_service
+              - match:
+                  prefix: "/manager"
+                route:
+                  cluster: ai_manager_service
+                  prefix_rewrite: "/"
+              - match:
                   prefix: "/api"
                 route:
                   cluster: test_app_service
@@ -53,8 +62,8 @@ static_resources:
                   cluster: keycloak_service
                   uri: http://keycloak:8080/realms/myrealm/protocol/openid-connect/token
                   timeout: 3s
-                authorization_endpoint: http://localhost:8080/realms/myrealm/protocol/openid-connect/auth
-                redirect_uri: "http://localhost:8000/callback"
+                authorization_endpoint: https://authz.digiprotect.be/realms/myrealm/protocol/openid-connect/auth
+                redirect_uri: "https://authz.digiprotect.be/callback"
                 redirect_path_matcher:
                   path:
                     exact: /callback
@@ -91,6 +100,12 @@ static_resources:
                   - name: ":path"
                     string_match:
                       prefix: "/logout"
+                  - name: ":path"
+                    string_match:
+                      prefix: "/realms"
+                  - name: ":path"
+                    string_match:
+                      prefix: "/manager"
           - name: envoy.filters.http.ext_authz
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
@@ -132,6 +147,20 @@ static_resources:
               socket_address:
                 address: keycloak
                 port_value: 8080
+
+  - name: ai_manager_service
+    connect_timeout: 0.25s
+    type: STRICT_DNS
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: ai_manager_service
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: ai-manager
+                port_value: 5000
 
   - name: opa_service
     connect_timeout: 0.25s

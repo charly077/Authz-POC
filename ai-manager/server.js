@@ -13,7 +13,7 @@ app.use(express.static('public'));
 
 // CORS for test-app at :8000
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', 'http://localhost:8000');
+    res.header('Access-Control-Allow-Origin', 'https://authz.digiprotect.be');
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type');
     if (req.method === 'OPTIONS') {

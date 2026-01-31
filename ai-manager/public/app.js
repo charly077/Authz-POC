@@ -35,7 +35,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 async function loadFGAStatus() {
     try {
-        const res = await fetch('/api/openfga/status');
+        const res = await fetch('api/openfga/status');
         const data = await res.json();
         const el = document.getElementById('fgaStatusText');
         if (data.ready) {
@@ -50,7 +50,7 @@ async function loadFGAStatus() {
 
 async function loadTuples(filters) {
     try {
-        let url = '/api/openfga/tuples';
+        let url = 'api/openfga/tuples';
         const params = new URLSearchParams();
         if (filters) {
             if (filters.user) params.set('user', filters.user);
@@ -84,7 +84,7 @@ async function loadTuples(filters) {
 
 async function deleteTuple(user, relation, object) {
     try {
-        const res = await fetch('/api/openfga/tuples', {
+        const res = await fetch('api/openfga/tuples', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user, relation, object })
@@ -110,7 +110,7 @@ document.getElementById('addTupleBtn').addEventListener('click', async () => {
         return;
     }
     try {
-        const res = await fetch('/api/openfga/tuples', {
+        const res = await fetch('api/openfga/tuples', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user, relation, object })
@@ -156,7 +156,7 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
     const resultEl = document.getElementById('checkResult');
     resultEl.innerHTML = 'Checking...';
     try {
-        const res = await fetch(`/api/openfga/check?user=${encodeURIComponent(user)}&relation=${encodeURIComponent(relation)}&object=${encodeURIComponent(object)}`);
+        const res = await fetch(`api/openfga/check?user=${encodeURIComponent(user)}&relation=${encodeURIComponent(relation)}&object=${encodeURIComponent(object)}`);
         const data = await res.json();
         if (data.error) {
             resultEl.innerHTML = `<span class="fga-denied">Error: ${escapeHtml(data.error)}</span>`;
@@ -172,7 +172,7 @@ document.getElementById('checkBtn').addEventListener('click', async () => {
 
 async function loadModel() {
     try {
-        const res = await fetch('/api/openfga/model');
+        const res = await fetch('api/openfga/model');
         const data = await res.json();
         document.getElementById('fgaModelContent').textContent = JSON.stringify(data, null, 2);
     } catch {
@@ -198,8 +198,8 @@ let lastGeneratedReplaces = "";
 async function loadRules() {
     try {
         const [opaRes, fgaRes] = await Promise.all([
-            fetch('/api/rules/opa'),
-            fetch('/api/rules/openfga')
+            fetch('api/rules/opa'),
+            fetch('api/rules/openfga')
         ]);
         const opaData = await opaRes.json();
         const fgaData = await fgaRes.json();
@@ -231,7 +231,7 @@ sendChatBtn.addEventListener('click', async () => {
     const loadingMsg = addMessage("Thinking...", 'ai', true);
 
     try {
-        const res = await fetch('/api/chat', {
+        const res = await fetch('api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message, context: currentContext })
@@ -336,7 +336,7 @@ generateBtn.addEventListener('click', async () => {
     generateBtn.disabled = true;
 
     try {
-        const res = await fetch('/api/generate-rule', {
+        const res = await fetch('api/generate-rule', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ prompt })
@@ -437,7 +437,7 @@ async function renderOpaViz() {
     container.innerHTML = '<p class="muted">Loading OPA policy...</p>';
 
     try {
-        const res = await fetch('/api/visualize/opa');
+        const res = await fetch('api/visualize/opa');
         const data = await res.json();
         if (data.error) {
             container.innerHTML = `<p class="muted">Error: ${escapeHtml(data.error)}</p>`;
@@ -488,8 +488,8 @@ async function renderFgaViz() {
 
     try {
         const [modelRes, tuplesRes] = await Promise.all([
-            fetch('/api/openfga/model'),
-            fetch('/api/openfga/tuples')
+            fetch('api/openfga/model'),
+            fetch('api/openfga/tuples')
         ]);
         const modelData = await modelRes.json();
         const tuplesData = await tuplesRes.json();
@@ -593,7 +593,7 @@ applyBtn.addEventListener('click', async () => {
     applyBtn.disabled = true;
 
     try {
-        const res = await fetch('/api/apply-policy', {
+        const res = await fetch('api/apply-policy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ code: lastGeneratedCode, replaces: lastGeneratedReplaces })
