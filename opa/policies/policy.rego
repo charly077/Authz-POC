@@ -167,11 +167,7 @@ is_public_path if {
 }
 
 is_public_path if {
-    startswith(http_request.path, "/auth")
-}
-
-is_public_path if {
-    startswith(http_request.path, "/realms")
+    startswith(http_request.path, "/login")
 }
 
 # Home page and callback — any authenticated user can access

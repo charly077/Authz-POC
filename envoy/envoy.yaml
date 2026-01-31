@@ -22,11 +22,7 @@ static_resources:
               domains: ["*"]
               routes:
               - match:
-                  prefix: "/auth"
-                route:
-                  cluster: keycloak_service
-              - match:
-                  prefix: "/realms"
+                  prefix: "/login"
                 route:
                   cluster: keycloak_service
               - match:
@@ -60,9 +56,9 @@ static_resources:
               config:
                 token_endpoint:
                   cluster: keycloak_service
-                  uri: http://keycloak:8080/realms/myrealm/protocol/openid-connect/token
+                  uri: http://keycloak:8080/login/realms/myrealm/protocol/openid-connect/token
                   timeout: 3s
-                authorization_endpoint: __EXTERNAL_URL__/realms/myrealm/protocol/openid-connect/auth
+                authorization_endpoint: __EXTERNAL_URL__/login/realms/myrealm/protocol/openid-connect/auth
                 redirect_uri: "__EXTERNAL_URL__/callback"
                 redirect_path_matcher:
                   path:
@@ -96,13 +92,10 @@ static_resources:
                       prefix: "/public"
                   - name: ":path"
                     string_match:
-                      prefix: "/auth"
+                      prefix: "/login"
                   - name: ":path"
                     string_match:
                       prefix: "/logout"
-                  - name: ":path"
-                    string_match:
-                      prefix: "/realms"
                   - name: ":path"
                     string_match:
                       prefix: "/manager"

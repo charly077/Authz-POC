@@ -1891,7 +1891,7 @@ func main() {
 	})
 
 	http.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		keycloakLogout := externalURL + "/realms/myrealm/protocol/openid-connect/logout" +
+		keycloakLogout := externalURL + "/login/realms/myrealm/protocol/openid-connect/logout" +
 			"?client_id=envoy" +
 			"&post_logout_redirect_uri=" + url.QueryEscape(externalURL+"/signout")
 		http.Redirect(w, r, keycloakLogout, http.StatusFound)
