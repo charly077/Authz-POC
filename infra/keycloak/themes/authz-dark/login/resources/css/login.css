@@ -1,0 +1,257 @@
+/* AuthZ Dark Theme — matches app palette */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+/* Base layout */
+body, html {
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+}
+
+body {
+    background-image:
+        radial-gradient(circle at 15% 15%, rgba(139, 92, 246, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(59, 130, 246, 0.12) 0%, transparent 40%);
+}
+
+/* Login card */
+#kc-login {
+    font-family: 'Outfit', sans-serif;
+}
+
+.login-pf body, body.login-pf {
+    background: #0f172a;
+    background-image:
+        radial-gradient(circle at 15% 15%, rgba(139, 92, 246, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(59, 130, 246, 0.12) 0%, transparent 40%);
+}
+
+/* Remove PatternFly background image */
+.login-pf .container,
+.login-pf body,
+body.login-pf,
+.login-pf {
+    background-image: none !important;
+}
+
+/* Card container */
+#kc-container-wrapper {
+    background: transparent;
+}
+
+.card-pf,
+#kc-form,
+#kc-login,
+.login-pf .card-pf {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 16px;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    padding: 2rem;
+    max-width: 440px;
+    margin: 0 auto;
+}
+
+/* Header / realm title */
+#kc-header-wrapper,
+.kc-header-wrapper,
+#kc-page-title {
+    color: #e2e8f0 !important;
+    font-family: 'Outfit', sans-serif !important;
+    font-weight: 600;
+}
+
+#kc-header {
+    color: #e2e8f0;
+}
+
+#kc-header-wrapper {
+    font-size: 1.5rem;
+    background: linear-gradient(to right, #8b5cf6, #22d3ee);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-align: center;
+    padding: 1rem 0;
+}
+
+/* Form labels */
+label,
+.control-label,
+.pf-c-form__label-text {
+    color: #94a3b8 !important;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+/* Form inputs */
+input[type="text"],
+input[type="password"],
+input[type="email"],
+.pf-c-form-control,
+#kc-form-login input[type="text"],
+#kc-form-login input[type="password"] {
+    background: rgba(15, 23, 42, 0.8) !important;
+    border: 1px solid #475569 !important;
+    border-radius: 10px !important;
+    color: #e2e8f0 !important;
+    padding: 0.75rem 1rem !important;
+    font-family: 'Outfit', sans-serif !important;
+    font-size: 0.95rem !important;
+    transition: border-color 0.2s ease !important;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus,
+.pf-c-form-control:focus {
+    border-color: #8b5cf6 !important;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15) !important;
+    outline: none !important;
+}
+
+input::placeholder {
+    color: #64748b !important;
+}
+
+/* Primary button (Sign In) */
+input[type="submit"],
+.btn-primary,
+#kc-login,
+.pf-c-button.pf-m-primary {
+    background: linear-gradient(135deg, #8b5cf6, #3b82f6) !important;
+    border: none !important;
+    border-radius: 10px !important;
+    color: #ffffff !important;
+    font-family: 'Outfit', sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 1rem !important;
+    padding: 0.75rem 1.5rem !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    text-shadow: none !important;
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3) !important;
+    width: 100%;
+}
+
+input[type="submit"]:hover,
+.btn-primary:hover,
+.pf-c-button.pf-m-primary:hover {
+    box-shadow: 0 6px 25px rgba(139, 92, 246, 0.5) !important;
+    transform: translateY(-1px);
+}
+
+/* Links */
+a,
+.login-pf a,
+#kc-registration a,
+#kc-info a,
+.kc-social-links a {
+    color: #22d3ee !important;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+a:hover,
+.login-pf a:hover {
+    color: #67e8f9 !important;
+    text-decoration: underline;
+}
+
+/* Text & muted text */
+.login-pf .feedback-success,
+.login-pf .instruction,
+.login-pf-page .login-pf-accounts,
+#kc-content-wrapper,
+#kc-form-wrapper,
+#kc-info-wrapper {
+    color: #94a3b8;
+}
+
+/* Error / alert styling */
+.alert,
+.alert-error,
+.pf-c-alert {
+    background: rgba(239, 68, 68, 0.1) !important;
+    border: 1px solid rgba(239, 68, 68, 0.3) !important;
+    border-radius: 10px !important;
+    color: #fca5a5 !important;
+}
+
+.alert-warning {
+    background: rgba(245, 158, 11, 0.1) !important;
+    border: 1px solid rgba(245, 158, 11, 0.3) !important;
+    color: #fcd34d !important;
+}
+
+.alert-success {
+    background: rgba(16, 185, 129, 0.1) !important;
+    border: 1px solid rgba(16, 185, 129, 0.3) !important;
+    color: #6ee7b7 !important;
+}
+
+/* "Remember me" checkbox */
+.checkbox label,
+.checkbox-inline {
+    color: #94a3b8 !important;
+}
+
+/* Social login buttons */
+.kc-social-provider-name {
+    color: #e2e8f0;
+}
+
+/* Footer / info text */
+#kc-info,
+#kc-info-wrapper {
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+/* Remove default PatternFly box shadows and backgrounds */
+.login-pf .card-pf {
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4) !important;
+}
+
+.login-pf #kc-locale ul,
+.login-pf #kc-locale a {
+    background: #1e293b !important;
+    color: #94a3b8 !important;
+    border-color: #334155 !important;
+}
+
+/* Separator */
+#kc-form-options,
+#kc-form-buttons {
+    border-top-color: #334155;
+}
+
+/* General PatternFly overrides */
+.pf-c-page,
+.pf-c-page__main,
+.pf-c-login {
+    background: #0f172a !important;
+}
+
+.pf-c-login__main {
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+    border-radius: 16px !important;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4) !important;
+}
+
+.pf-c-login__main-header,
+.pf-c-login__main-body,
+.pf-c-login__main-footer {
+    color: #e2e8f0;
+}
+
+.pf-c-title {
+    color: #e2e8f0 !important;
+    font-family: 'Outfit', sans-serif !important;
+}

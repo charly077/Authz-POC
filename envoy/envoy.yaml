@@ -35,6 +35,14 @@ static_resources:
                 route:
                   cluster: test_app_service
               - match:
+                  path: "/"
+                redirect:
+                  path_redirect: "/public"
+                typed_per_filter_config:
+                  envoy.filters.http.ext_authz:
+                    "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthzPerRoute
+                    disabled: true
+              - match:
                   prefix: "/"
                 route:
                   cluster: test_app_service
@@ -56,9 +64,9 @@ static_resources:
               config:
                 token_endpoint:
                   cluster: keycloak_service
-                  uri: http://keycloak:8080/login/realms/myrealm/protocol/openid-connect/token
+                  uri: http://keycloak:8080/login/realms/AuthorizationRealm/protocol/openid-connect/token
                   timeout: 3s
-                authorization_endpoint: __EXTERNAL_URL__/login/realms/myrealm/protocol/openid-connect/auth
+                authorization_endpoint: __EXTERNAL_URL__/login/realms/AuthorizationRealm/protocol/openid-connect/auth
                 redirect_uri: "__EXTERNAL_URL__/callback"
                 redirect_path_matcher:
                   path:
@@ -87,6 +95,9 @@ static_resources:
                 # Pass the token to the backend/OPA
                 forward_bearer_token: true
                 pass_through_matcher:
+                  - name: ":path"
+                    string_match:
+                      exact: "/"
                   - name: ":path"
                     string_match:
                       prefix: "/public"

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Get token for Alice
 echo "Requesting token for 'alice'..."
-RESPONSE=$(curl -s -X POST http://localhost:8080/realms/myrealm/protocol/openid-connect/token \
+RESPONSE=$(curl -s -X POST http://localhost:8080/realms/AuthorizationRealm/protocol/openid-connect/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "username=alice" \
   -d "password=alice" \

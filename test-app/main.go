@@ -728,7 +728,7 @@ const pageTemplate = `<!DOCTYPE html>
             <span class="nav-title">AuthZ POC</span>
         </div>
         <div class="nav-links">
-            <a href="/"{{if eq .Path "/"}} class="active"{{end}}>Home</a>
+            <a href="/home"{{if eq .Path "/home"}} class="active"{{end}}>Home</a>
             <a href="/public"{{if eq .Path "/public"}} class="active"{{end}}>Public</a>
             <a href="/api/protected"{{if eq .Path "/api/protected"}} class="active"{{end}}>Protected</a>
             <a href="/animals"{{if eq .Path "/animals"}} class="active"{{end}}>Animals</a>
@@ -742,13 +742,13 @@ const pageTemplate = `<!DOCTYPE html>
                 </div>
                 <a href="/logout" class="btn-logout">Sign out</a>
             {{else if not .IsPublic}}
-                <a href="/" class="btn-logout" style="background: rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.2); color: #c4b5fd;">Sign in</a>
+                <a href="/home" class="btn-logout" style="background: rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.2); color: #c4b5fd;">Sign in</a>
             {{end}}
         </div>
     </nav>
 
     <div class="container">
-        {{if eq .Path "/"}}
+        {{if eq .Path "/home"}}
             <div class="page-header">
                 <h1>Fine-Grained Authorization</h1>
                 <p>Externalized policy enforcement with OPA, Keycloak, and OpenFGA</p>
@@ -1111,7 +1111,7 @@ const animalsPageTemplate = `<!DOCTYPE html>
             <span class="nav-title">AuthZ POC</span>
         </div>
         <div class="nav-links">
-            <a href="/">Home</a>
+            <a href="/home">Home</a>
             <a href="/public">Public</a>
             <a href="/api/protected">Protected</a>
             <a href="/animals" class="active">Animals</a>
@@ -1891,7 +1891,7 @@ func main() {
 	})
 
 	http.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		keycloakLogout := externalURL + "/login/realms/myrealm/protocol/openid-connect/logout" +
+		keycloakLogout := externalURL + "/login/realms/AuthorizationRealm/protocol/openid-connect/logout" +
 			"?client_id=envoy" +
 			"&post_logout_redirect_uri=" + url.QueryEscape(externalURL+"/signout")
 		http.Redirect(w, r, keycloakLogout, http.StatusFound)
@@ -1928,7 +1928,7 @@ func main() {
 	http.HandleFunc("/animals", func(w http.ResponseWriter, r *http.Request) {
 		user := getUser(r)
 		if user == "anonymous" {
-			http.Redirect(w, r, "/", http.StatusFound)
+			http.Redirect(w, r, "/home", http.StatusFound)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -2024,22 +2024,26 @@ func main() {
 		jsonResponse(w, map[string]interface{}{"ready": fgaReady, "storeId": fgaStoreId, "modelId": fgaModelId}, 200)
 	})
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			if wantsJSON(r) {
-				jsonResponse(w, map[string]string{"status": "error", "message": "Not found", "path": r.URL.Path}, http.StatusNotFound)
-				return
-			}
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w, "Not found: %s", r.URL.Path)
-			return
-		}
+	http.HandleFunc("/home", func(w http.ResponseWriter, r *http.Request) {
 		if wantsJSON(r) {
 			jsonResponse(w, map[string]interface{}{"status": "ok", "message": "Authorization POC - Test Application"}, http.StatusOK)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		tmpl.Execute(w, buildPageData(r, false))
+	})
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, "/public", http.StatusFound)
+			return
+		}
+		if wantsJSON(r) {
+			jsonResponse(w, map[string]string{"status": "error", "message": "Not found", "path": r.URL.Path}, http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, "Not found: %s", r.URL.Path)
 	})
 
 	log.Printf("Server starting on port %s", port)

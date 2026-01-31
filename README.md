@@ -66,7 +66,7 @@ graph LR
     ```
 
 3.  **Setup Keycloak** (First run only):
-    The `setup_keycloak.sh` script runs automatically, creating the `myrealm`, client `envoy`, and users `alice` and `bob`.
+    The `setup_keycloak.sh` script runs automatically, creating the `AuthorizationRealm`, client `envoy`, and users `alice` and `bob`.
 
 ### Usage
 *   **Public Access**: [http://localhost:8000/public](http://localhost:8000/public)

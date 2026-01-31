@@ -28,6 +28,7 @@ services:
       KC_HTTP_RELATIVE_PATH: /login
     volumes:
       - ./infra/keycloak/realm.json:/opt/keycloak/data/import/realm.json
+      - ./infra/keycloak/themes:/opt/keycloak/themes
     depends_on:
       - postgres
     networks:
