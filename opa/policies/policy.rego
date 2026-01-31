@@ -166,6 +166,14 @@ is_public_path if {
     startswith(http_request.path, "/manager")
 }
 
+is_public_path if {
+    startswith(http_request.path, "/auth")
+}
+
+is_public_path if {
+    startswith(http_request.path, "/realms")
+}
+
 # Home page and callback — any authenticated user can access
 authorized if {
     has_valid_token
