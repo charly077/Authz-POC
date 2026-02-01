@@ -31,7 +31,7 @@
         "https://authz.digiprotect.be"
       ],
       "attributes": {
-        "post.logout.redirect.uris": "http://localhost:8000/manager/*##https://authz.digiprotect.be/*"
+        "post.logout.redirect.uris": "http://localhost:8000/*##https://authz.digiprotect.be/*"
       }
     }
   ],

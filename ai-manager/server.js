@@ -446,13 +446,13 @@ app.get('/auth/logout', (req, res) => {
         if (oidcClient && oidcClient._externalEndSessionUrl) {
             let logoutUrl = oidcClient._externalEndSessionUrl +
                 '?client_id=' + encodeURIComponent(KEYCLOAK_CLIENT_ID) +
-                '&post_logout_redirect_uri=' + encodeURIComponent(`${EXTERNAL_URL}/manager/`);
+                '&post_logout_redirect_uri=' + encodeURIComponent(`${EXTERNAL_URL}/`);
             if (idToken) {
                 logoutUrl += '&id_token_hint=' + encodeURIComponent(idToken);
             }
             res.redirect(logoutUrl);
         } else {
-            res.redirect('/manager/');
+            res.redirect('/');
         }
     });
 });
