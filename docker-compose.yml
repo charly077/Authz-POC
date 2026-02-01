@@ -27,7 +27,7 @@ services:
         mkdir -p /opt/keycloak/data/import
         cp /tmp/realm.json /opt/keycloak/data/import/
         sed "s|__AI_MANAGER_ADMIN_PASSWORD__|$$AI_MANAGER_ADMIN_PASSWORD|g" /tmp/ai-manager-realm.json.tmpl > /opt/keycloak/data/import/ai-manager-realm.json
-        /opt/keycloak/bin/kc.sh start-dev --import-realm
+        KC_SPI_IMPORT_REALM_STRATEGY=OVERWRITE_EXISTING /opt/keycloak/bin/kc.sh start-dev --import-realm
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak

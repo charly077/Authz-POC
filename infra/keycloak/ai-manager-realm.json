@@ -58,6 +58,8 @@
     {
       "username": "admin",
       "enabled": true,
+      "email": "admin@local.dev",
+      "emailVerified": true,
       "credentials": [
         {
           "type": "password",
