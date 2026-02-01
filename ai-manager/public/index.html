@@ -23,7 +23,10 @@
                     <h1>AI Authorization Manager</h1>
                     <p>Define policies using natural language. We handle the rest.</p>
                 </div>
-                <a href="auth/logout" class="logout-btn">Logout</a>
+                <div class="header-actions">
+                    <a href="/grafana" class="secondary-btn" target="_blank">Grafana</a>
+                    <a href="auth/logout" class="logout-btn">Logout</a>
+                </div>
             </div>
         </header>
 
@@ -32,6 +35,7 @@
             <button class="tab-btn" data-tab="chat">View & Chat</button>
             <button class="tab-btn" data-tab="openfga">OpenFGA Manager</button>
             <button class="tab-btn" data-tab="visualize">Visualization</button>
+            <button class="tab-btn" data-tab="audit">Audit Log</button>
         </div>
 
         <main id="generate" class="tab-content active">
@@ -176,6 +180,48 @@
                     <button class="secondary-btn small-btn" id="refreshFgaVizBtn">Refresh</button>
                 </div>
                 <div class="mermaid-container" id="fgaVizContainer"></div>
+            </div>
+        </main>
+
+        <main id="audit" class="tab-content">
+            <div class="card">
+                <div class="viz-header">
+                    <h2>Audit Log</h2>
+                    <button class="secondary-btn small-btn" id="refreshAuditBtn">Refresh</button>
+                </div>
+                <div class="audit-filters">
+                    <select id="auditSourceFilter">
+                        <option value="all">All Sources</option>
+                        <option value="OPA">OPA</option>
+                        <option value="OpenFGA">OpenFGA</option>
+                    </select>
+                    <select id="auditDecisionFilter">
+                        <option value="all">All Decisions</option>
+                        <option value="allow">Allow</option>
+                        <option value="deny">Deny</option>
+                    </select>
+                    <input type="text" id="auditUserFilter" placeholder="Filter by user...">
+                    <label class="auto-refresh-label">
+                        <input type="checkbox" id="auditAutoRefresh" checked>
+                        Auto-refresh
+                    </label>
+                </div>
+                <table class="fga-table" id="auditTable">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Source</th>
+                            <th>Decision</th>
+                            <th>User</th>
+                            <th>Path / Resource</th>
+                            <th>Method</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="auditBody">
+                        <tr><td colspan="7" class="muted">Loading...</td></tr>
+                    </tbody>
+                </table>
             </div>
         </main>
     </div>

@@ -172,6 +172,10 @@ is_public_path if {
     startswith(http_request.path, "/login")
 }
 
+is_public_path if {
+    startswith(http_request.path, "/grafana")
+}
+
 # Home page and callback — any authenticated user can access
 authorized if {
     has_valid_token

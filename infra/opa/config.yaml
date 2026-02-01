@@ -1,5 +1,14 @@
+services:
+  ai-manager:
+    url: http://ai-manager:5000
+
 decision_logs:
   console: true
+  service: ai-manager
+  reporting:
+    min_delay_seconds: 1
+    max_delay_seconds: 5
+
 plugins:
   envoy_ext_authz_grpc:
     addr: :9191

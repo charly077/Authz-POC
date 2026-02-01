@@ -33,6 +33,25 @@
       "attributes": {
         "post.logout.redirect.uris": "http://localhost:8000/*##https://authz.digiprotect.be/*"
       }
+    },
+    {
+      "clientId": "grafana",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "grafana-secret",
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "http://localhost:8000/grafana/login/generic_oauth",
+        "https://authz.digiprotect.be/grafana/login/generic_oauth"
+      ],
+      "webOrigins": [
+        "http://localhost:8000",
+        "https://authz.digiprotect.be"
+      ]
     }
   ],
   "users": [

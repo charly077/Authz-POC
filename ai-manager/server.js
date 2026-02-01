@@ -71,6 +71,34 @@ let fgaStoreId = null;
 let fgaModelId = null;
 let fgaReady = false;
 
+// ──────────────────────────────────────
+// In-memory audit log store
+// ──────────────────────────────────────
+const MAX_AUDIT_LOGS = 500;
+const auditLogs = [];
+let auditIdCounter = 0;
+
+function addAuditLog(entry) {
+    auditIdCounter++;
+    const log = {
+        id: auditIdCounter,
+        timestamp: new Date().toISOString(),
+        source: entry.source || 'unknown',
+        decision: entry.decision || 'unknown',
+        user: entry.user || '',
+        path: entry.path || '',
+        resource: entry.resource || '',
+        relation: entry.relation || '',
+        method: entry.method || '',
+        reason: entry.reason || '',
+    };
+    auditLogs.unshift(log);
+    if (auditLogs.length > MAX_AUDIT_LOGS) {
+        auditLogs.length = MAX_AUDIT_LOGS;
+    }
+    return log;
+}
+
 async function loadFGAConfig() {
     for (let attempt = 1; attempt <= 30; attempt++) {
         try {
@@ -455,6 +483,77 @@ app.get('/auth/logout', (req, res) => {
 });
 
 // ──────────────────────────────────────
+// OPA Decision Log receiver (unauthenticated)
+// OPA POSTs batched decision log arrays here
+// ──────────────────────────────────────
+
+app.post('/logs', (req, res) => {
+    try {
+        const logs = Array.isArray(req.body) ? req.body : [];
+        for (const entry of logs) {
+            const input = entry?.input?.attributes?.request?.http || {};
+            const path = input.path || '';
+            const method = (input.method || '').toUpperCase();
+
+            // Skip /manager paths to reduce noise
+            if (path.startsWith('/manager')) continue;
+
+            const result = entry?.result || {};
+            const allowed = result.allowed === true;
+            const user = result.headers?.['x-current-user'] || '';
+            let reason = '';
+
+            if (result.body) {
+                try {
+                    const body = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
+                    reason = body.reason || body.message || '';
+                } catch {
+                    reason = String(result.body).substring(0, 200);
+                }
+            }
+
+            addAuditLog({
+                source: 'OPA',
+                decision: allowed ? 'allow' : 'deny',
+                user,
+                path,
+                method,
+                reason: reason || (allowed ? 'Policy allowed' : 'Policy denied'),
+            });
+        }
+    } catch (err) {
+        console.error('Error processing OPA decision logs:', err.message);
+    }
+    res.status(200).json({});
+});
+
+// ──────────────────────────────────────
+// Audit entry receiver (unauthenticated)
+// Test-app POSTs individual audit entries here
+// ──────────────────────────────────────
+
+app.post('/audit', (req, res) => {
+    try {
+        const entry = req.body || {};
+        if (entry.source) {
+            addAuditLog({
+                source: entry.source,
+                decision: entry.decision || 'unknown',
+                user: entry.user || '',
+                path: entry.path || '',
+                resource: entry.resource || '',
+                relation: entry.relation || '',
+                method: entry.method || '',
+                reason: entry.reason || '',
+            });
+        }
+    } catch (err) {
+        console.error('Error processing audit entry:', err.message);
+    }
+    res.status(200).json({});
+});
+
+// ──────────────────────────────────────
 // Auth middleware — protects all /api/* routes defined below
 // (explain-authz is mounted above, so it's exempt)
 // ──────────────────────────────────────
@@ -462,6 +561,28 @@ app.get('/auth/logout', (req, res) => {
 app.use('/api', (req, res, next) => {
     if (req.session?.user) return next();
     res.status(401).json({ error: 'Authentication required. Please log in at /manager/auth/login' });
+});
+
+// ──────────────────────────────────────
+// Audit log API (authenticated)
+// ──────────────────────────────────────
+
+app.get('/api/audit', (req, res) => {
+    let filtered = auditLogs;
+    const { source, decision, user, limit } = req.query;
+
+    if (source && source !== 'all') {
+        filtered = filtered.filter(l => l.source.toLowerCase() === source.toLowerCase());
+    }
+    if (decision && decision !== 'all') {
+        filtered = filtered.filter(l => l.decision.toLowerCase() === decision.toLowerCase());
+    }
+    if (user) {
+        filtered = filtered.filter(l => l.user.toLowerCase().includes(user.toLowerCase()));
+    }
+
+    const max = Math.min(parseInt(limit) || 200, MAX_AUDIT_LOGS);
+    res.json({ logs: filtered.slice(0, max) });
 });
 
 // ──────────────────────────────────────
@@ -699,6 +820,14 @@ app.post('/api/openfga/tuples', async (req, res) => {
         await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/write`, {
             writes: { tuple_keys: [{ user, relation, object }] }
         });
+        addAuditLog({
+            source: 'OpenFGA',
+            decision: 'write',
+            user,
+            relation,
+            resource: object,
+            reason: `Tuple added: ${user} ${relation} ${object}`,
+        });
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ error: e.response?.data?.message || e.message });
@@ -714,6 +843,14 @@ app.delete('/api/openfga/tuples', async (req, res) => {
     try {
         await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/write`, {
             deletes: { tuple_keys: [{ user, relation, object }] }
+        });
+        addAuditLog({
+            source: 'OpenFGA',
+            decision: 'delete',
+            user,
+            relation,
+            resource: object,
+            reason: `Tuple deleted: ${user} ${relation} ${object}`,
         });
         res.json({ success: true });
     } catch (e) {
@@ -742,7 +879,16 @@ app.get('/api/openfga/check', async (req, res) => {
             tuple_key: { user, relation, object },
             authorization_model_id: fgaModelId
         });
-        res.json({ allowed: result.data.allowed === true, resolution: result.data.resolution });
+        const allowed = result.data.allowed === true;
+        addAuditLog({
+            source: 'OpenFGA',
+            decision: allowed ? 'allow' : 'deny',
+            user,
+            relation,
+            resource: object,
+            reason: allowed ? `${user} has ${relation} on ${object}` : `${user} does not have ${relation} on ${object}`,
+        });
+        res.json({ allowed, resolution: result.data.resolution });
     } catch (e) {
         res.status(500).json({ error: e.response?.data?.message || e.message });
     }

@@ -44,6 +44,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.add('active');
         document.getElementById(btn.dataset.tab).classList.add('active');
 
+        stopAuditAutoRefresh();
+
         switch (btn.dataset.tab) {
             case 'chat':
                 loadRules();
@@ -55,6 +57,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                 break;
             case 'visualize':
                 renderAllViz();
+                break;
+            case 'audit':
+                loadAuditLogs();
+                startAuditAutoRefresh();
                 break;
         }
     });
@@ -601,6 +607,131 @@ function renderAllViz() {
 document.getElementById('refreshArchBtn')?.addEventListener('click', renderArchitectureDiagram);
 document.getElementById('refreshOpaVizBtn')?.addEventListener('click', renderOpaViz);
 document.getElementById('refreshFgaVizBtn')?.addEventListener('click', renderFgaViz);
+
+// ──────────────────────────────────────
+// Generate / Apply Rule
+// ──────────────────────────────────────
+
+// ──────────────────────────────────────
+// Audit Log Tab
+// ──────────────────────────────────────
+
+let auditAutoRefreshInterval = null;
+
+async function loadAuditLogs() {
+    try {
+        const source = document.getElementById('auditSourceFilter').value;
+        const decision = document.getElementById('auditDecisionFilter').value;
+        const user = document.getElementById('auditUserFilter').value.trim();
+
+        const params = new URLSearchParams();
+        if (source !== 'all') params.set('source', source);
+        if (decision !== 'all') params.set('decision', decision);
+        if (user) params.set('user', user);
+
+        const query = params.toString();
+        const url = 'api/audit' + (query ? '?' + query : '');
+
+        const res = await fetch(url);
+        const data = await res.json();
+        const tbody = document.getElementById('auditBody');
+        const logs = data.logs || [];
+
+        tbody.textContent = '';
+
+        if (logs.length === 0) {
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 7;
+            cell.className = 'muted';
+            cell.textContent = 'No audit logs yet. Access the test-app to generate OPA decisions, or use OpenFGA Check above.';
+            row.appendChild(cell);
+            tbody.appendChild(row);
+            return;
+        }
+
+        logs.forEach(log => {
+            const row = document.createElement('tr');
+
+            const tsCell = document.createElement('td');
+            tsCell.textContent = new Date(log.timestamp).toLocaleTimeString();
+            row.appendChild(tsCell);
+
+            const sourceCell = document.createElement('td');
+            const sourceBadge = document.createElement('span');
+            sourceBadge.className = 'source-badge ' + (log.source === 'OPA' ? 'opa' : 'openfga');
+            sourceBadge.textContent = log.source;
+            sourceCell.appendChild(sourceBadge);
+            row.appendChild(sourceCell);
+
+            const decisionCell = document.createElement('td');
+            const decisionSpan = document.createElement('span');
+            decisionSpan.className = 'decision-' + log.decision;
+            decisionSpan.textContent = log.decision.toUpperCase();
+            decisionCell.appendChild(decisionSpan);
+            row.appendChild(decisionCell);
+
+            const userCell = document.createElement('td');
+            userCell.textContent = log.user;
+            row.appendChild(userCell);
+
+            const pathCell = document.createElement('td');
+            const pathCode = document.createElement('code');
+            pathCode.textContent = log.path || log.resource || '';
+            pathCell.appendChild(pathCode);
+            row.appendChild(pathCell);
+
+            const methodCell = document.createElement('td');
+            methodCell.textContent = log.method;
+            row.appendChild(methodCell);
+
+            const reasonCell = document.createElement('td');
+            reasonCell.textContent = log.reason;
+            row.appendChild(reasonCell);
+
+            tbody.appendChild(row);
+        });
+    } catch (e) {
+        const tbody = document.getElementById('auditBody');
+        tbody.textContent = '';
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 7;
+        cell.className = 'muted';
+        cell.textContent = 'Error loading audit logs: ' + e.message;
+        row.appendChild(cell);
+        tbody.appendChild(row);
+    }
+}
+
+function startAuditAutoRefresh() {
+    stopAuditAutoRefresh();
+    const checkbox = document.getElementById('auditAutoRefresh');
+    if (checkbox && checkbox.checked) {
+        auditAutoRefreshInterval = setInterval(loadAuditLogs, 5000);
+    }
+}
+
+function stopAuditAutoRefresh() {
+    if (auditAutoRefreshInterval) {
+        clearInterval(auditAutoRefreshInterval);
+        auditAutoRefreshInterval = null;
+    }
+}
+
+document.getElementById('refreshAuditBtn')?.addEventListener('click', loadAuditLogs);
+
+document.getElementById('auditAutoRefresh')?.addEventListener('change', (e) => {
+    if (e.target.checked) {
+        startAuditAutoRefresh();
+    } else {
+        stopAuditAutoRefresh();
+    }
+});
+
+document.getElementById('auditSourceFilter')?.addEventListener('change', loadAuditLogs);
+document.getElementById('auditDecisionFilter')?.addEventListener('change', loadAuditLogs);
+document.getElementById('auditUserFilter')?.addEventListener('input', loadAuditLogs);
 
 // ──────────────────────────────────────
 // Generate / Apply Rule

@@ -19,6 +19,7 @@ import (
 
 var startTime = time.Now()
 var externalURL string
+var auditURL string
 
 // ──────────────────────────────────────
 // OpenFGA config + helpers
@@ -93,6 +94,14 @@ func fgaWrite(writes []tupleKey, deletes []tupleKey) error {
 		body["deletes"] = map[string]interface{}{"tuple_keys": deletes}
 	}
 	_, err := fgaRequest("POST", "/stores/"+fgaStoreId+"/write", body)
+	if err == nil {
+		for _, t := range writes {
+			sendAuditLog("OpenFGA", "write", t.User, t.Relation, t.Object, "WRITE", "Tuple added: "+t.User+" "+t.Relation+" "+t.Object)
+		}
+		for _, t := range deletes {
+			sendAuditLog("OpenFGA", "delete", t.User, t.Relation, t.Object, "WRITE", "Tuple deleted: "+t.User+" "+t.Relation+" "+t.Object)
+		}
+	}
 	return err
 }
 
@@ -103,9 +112,17 @@ func fgaCheck(user, relation, object string) bool {
 	}
 	result, err := fgaRequest("POST", "/stores/"+fgaStoreId+"/check", body)
 	if err != nil {
+		sendAuditLog("OpenFGA", "deny", user, relation, object, "CHECK", "Error: "+err.Error())
 		return false
 	}
 	allowed, _ := result["allowed"].(bool)
+	decision := "deny"
+	reason := user + " does not have " + relation + " on " + object
+	if allowed {
+		decision = "allow"
+		reason = user + " has " + relation + " on " + object
+	}
+	sendAuditLog("OpenFGA", decision, user, relation, object, "CHECK", reason)
 	return allowed
 }
 
@@ -118,10 +135,12 @@ func fgaListObjects(user, relation, typeName string) []string {
 	}
 	result, err := fgaRequest("POST", "/stores/"+fgaStoreId+"/list-objects", body)
 	if err != nil {
+		sendAuditLog("OpenFGA", "deny", user, relation, typeName+":*", "LIST", "Error: "+err.Error())
 		return nil
 	}
 	objects, ok := result["objects"].([]interface{})
 	if !ok {
+		sendAuditLog("OpenFGA", "allow", user, relation, typeName+":*", "LIST", fmt.Sprintf("Listed 0 %s objects", typeName))
 		return nil
 	}
 	var out []string
@@ -130,7 +149,35 @@ func fgaListObjects(user, relation, typeName string) []string {
 			out = append(out, s)
 		}
 	}
+	sendAuditLog("OpenFGA", "allow", user, relation, typeName+":*", "LIST", fmt.Sprintf("Listed %d %s objects", len(out), typeName))
 	return out
+}
+
+// ──────────────────────────────────────
+// Audit log helper — fire-and-forget POST to AI Manager
+// ──────────────────────────────────────
+
+func sendAuditLog(source, decision, user, relation, resource, method, reason string) {
+	if auditURL == "" {
+		return
+	}
+	go func() {
+		entry := map[string]string{
+			"source":   source,
+			"decision": decision,
+			"user":     user,
+			"relation": relation,
+			"resource": resource,
+			"method":   method,
+			"reason":   reason,
+		}
+		b, _ := json.Marshal(entry)
+		resp, err := http.Post(auditURL+"/audit", "application/json", bytes.NewReader(b))
+		if err != nil {
+			return
+		}
+		resp.Body.Close()
+	}()
 }
 
 // ──────────────────────────────────────
@@ -2071,6 +2118,10 @@ func main() {
 	openfgaURL = os.Getenv("OPENFGA_URL")
 	if openfgaURL == "" {
 		openfgaURL = "http://openfga:8080"
+	}
+	auditURL = os.Getenv("AUDIT_URL")
+	if auditURL == "" {
+		auditURL = "http://ai-manager:5000"
 	}
 
 	loadData()
