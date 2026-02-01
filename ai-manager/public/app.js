@@ -1,3 +1,32 @@
+// ──────────────────────────────────────
+// Auth check — redirect to login if not authenticated
+// ──────────────────────────────────────
+
+(async function checkAuth() {
+    try {
+        const res = await fetch('auth/status');
+        const data = await res.json();
+        if (!data.authenticated) {
+            window.location.href = 'auth/login';
+            return;
+        }
+    } catch (e) {
+        console.error('Auth check failed:', e);
+        window.location.href = 'auth/login';
+        return;
+    }
+})();
+
+// Wrap fetch to handle 401s globally
+const _origFetch = window.fetch;
+window.fetch = async function (...args) {
+    const res = await _origFetch.apply(this, args);
+    if (res.status === 401) {
+        window.location.href = 'auth/login';
+    }
+    return res;
+};
+
 const generateBtn = document.getElementById('generateBtn');
 const applyBtn = document.getElementById('applyBtn');
 const promptInput = document.getElementById('promptInput');

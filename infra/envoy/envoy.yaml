@@ -89,13 +89,13 @@ static_resources:
                     sds_config:
                       resource_api_version: V3
                       path_config_source:
-                        path: "/etc/envoy/token_secret.yaml"
+                        path: "/tmp/token_secret.yaml"
                   hmac_secret:
                     name: hmac
                     sds_config:
                       resource_api_version: V3
                       path_config_source:
-                        path: "/etc/envoy/hmac_secret.yaml"
+                        path: "/tmp/hmac_secret.yaml"
                 # Pass the token to the backend/OPA
                 forward_bearer_token: true
                 pass_through_matcher:
