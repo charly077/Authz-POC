@@ -777,3 +777,49 @@ a:hover,
         gap: 0.5rem;
     }
 }
+
+/* ─── Logout Page ─── */
+.logout-description {
+    margin-bottom: 1.75rem;
+}
+
+.logout-description p {
+    font-family: var(--font-body);
+    font-size: 0.92rem;
+    color: var(--ink-muted);
+    line-height: 1.6;
+    margin: 0;
+}
+
+.btn-logout-confirm {
+    background: var(--coral) !important;
+    box-shadow: 0 2px 8px rgba(241, 117, 71, 0.2) !important;
+}
+
+.btn-logout-confirm:hover {
+    background: #e0653a !important;
+    box-shadow: 0 4px 20px rgba(241, 117, 71, 0.3) !important;
+}
+
+.btn-logout-confirm:active {
+    box-shadow: 0 1px 4px rgba(241, 117, 71, 0.2) !important;
+}
+
+.back-link {
+    margin-top: 1.5rem;
+    text-align: center;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+}
+
+.back-link a {
+    color: var(--primary) !important;
+    text-decoration: none !important;
+    font-weight: 600 !important;
+    transition: color 0.2s !important;
+}
+
+.back-link a:hover {
+    color: var(--primary-light) !important;
+    text-decoration: underline !important;
+}

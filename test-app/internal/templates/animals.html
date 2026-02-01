@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuthZ POC - Animals</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Nunito+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #faf8f5; --surface: #f0ebe4; --surface-hover: #e8e2d9;
+            --border: #e0d8ce; --text: #2c2420; --text-muted: #8c7e72;
+            --rose: #c4a097; --rose-deep: #a8786d; --rose-bg: #ecddd8;
+            --sage: #6b9080; --sage-bg: #dfe9e3; --sage-deep: #4a7a64;
+            --warm-dark: #3d302a; --danger: #c0544f; --danger-bg: #f5e0de;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Nunito Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+        nav { display: flex; align-items: center; justify-content: space-between; padding: 1.1rem 2.5rem;
+            background: white; border-bottom: 1px solid var(--border);
+            position: sticky; top: 0; z-index: 100; }
+        .nav-brand { display: flex; align-items: center; gap: 0.6rem; }
+        .nav-logo { width: 34px; height: 34px; background: var(--warm-dark);
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 0.95rem; font-weight: 700; color: white; font-family: 'Cormorant Garamond', serif; }
+        .nav-title { font-family: 'Cormorant Garamond', serif; font-size: 1.25rem; font-weight: 700; color: var(--text); }
+        .nav-links { display: flex; align-items: center; gap: 0.15rem; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; padding: 0.45rem 1rem; border-radius: 999px;
+            font-size: 0.88rem; font-weight: 600; transition: all 0.2s; }
+        .nav-links a:hover { color: var(--text); background: var(--surface); }
+        .nav-links a.active { color: white; background: var(--warm-dark); }
+        .nav-user { display: flex; align-items: center; gap: 0.75rem; }
+        .user-badge { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.85rem;
+            background: var(--surface); border-radius: 999px; }
+        .user-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--rose);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.72rem; font-weight: 800; color: white; text-transform: uppercase; }
+        .user-name { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+        .btn-logout { display: inline-flex; align-items: center; padding: 0.4rem 1rem;
+            background: transparent; border: 1.5px solid var(--border); color: var(--text-muted);
+            border-radius: 999px; text-decoration: none; font-size: 0.82rem; font-weight: 600; transition: all 0.2s; }
+        .btn-logout:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-bg); }
+
+        .container { max-width: 920px; margin: 0 auto; padding: 3rem 2rem; }
+        .page-header { margin-bottom: 2.5rem; }
+        .page-header h1 { font-family: 'Cormorant Garamond', serif; font-size: 2.6rem; font-weight: 700;
+            line-height: 1.15; margin-bottom: 0.5rem; }
+        .page-header h1 em { font-style: italic; color: var(--rose-deep); }
+        .page-header p { color: var(--text-muted); font-size: 0.95rem; }
+
+        .card { background: white; border-radius: 14px; padding: 1.5rem; margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .card h3 { font-family: 'Cormorant Garamond', serif; color: var(--text); margin-bottom: 0.75rem;
+            font-size: 1.2rem; font-weight: 700; }
+        .card h4 { color: var(--text-muted); font-size: 0.78rem; margin-top: 0.75rem; margin-bottom: 0.25rem;
+            font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+
+        .top-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+        .friends-list { margin-bottom: 0.75rem; }
+        .friend-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; font-weight: 500; }
+        .friend-request-form { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+
+        input[type="text"], input[type="number"], select {
+            width: 100%; padding: 0.55rem 0.85rem; margin-bottom: 0.5rem; border-radius: 10px;
+            border: 1.5px solid var(--border); background: var(--bg); color: var(--text);
+            font-family: 'Nunito Sans', sans-serif; font-size: 0.9rem; }
+        input:focus, select:focus { outline: none; border-color: var(--rose); }
+
+        .friend-request-form select { flex: 1; margin-bottom: 0; }
+        .friend-request-form input { flex: 1; margin-bottom: 0; }
+
+        .btn { padding: 0.5rem 1rem; border-radius: 999px; font-weight: 700; cursor: pointer; border: none;
+            transition: all 0.2s; font-family: 'Nunito Sans', sans-serif; font-size: 0.85rem; }
+        .btn-primary { background: var(--warm-dark); color: white; }
+        .btn-primary:hover { background: #2c2420; box-shadow: 0 4px 14px rgba(61,48,42,0.2); }
+        .btn-danger { background: var(--danger-bg); color: var(--danger); }
+        .btn-danger:hover { background: #f0ccc9; }
+        .btn-success { background: var(--sage-bg); color: var(--sage-deep); }
+        .btn-success:hover { background: #d0dfd5; }
+        .btn-secondary { background: var(--surface); color: var(--text); }
+        .btn-sm { padding: 0.35rem 0.8rem; font-size: 0.78rem; }
+        .btn-xs { padding: 0.22rem 0.55rem; font-size: 0.72rem; line-height: 1; }
+
+        .animals-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.85rem; margin-top: 0.75rem; }
+        .animal-card { background: var(--bg); border-radius: 14px; padding: 1.1rem;
+            transition: box-shadow 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+        .animal-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.07); }
+        .animal-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+        .animal-card-header strong { font-family: 'Cormorant Garamond', serif; font-weight: 700; font-size: 1.1rem; }
+        .animal-owner { color: var(--text-muted); font-size: 0.78rem; }
+        .species-badge { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.72rem;
+            font-weight: 700; background: var(--rose-bg); color: var(--rose-deep); margin-right: 0.5rem; }
+        .animal-age { color: var(--text-muted); font-size: 0.82rem; }
+        .animal-actions { margin-top: 0.75rem; display: flex; gap: 0.4rem; }
+        .animal-relations { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+        .animal-relations h5 { color: var(--text-muted);
+            font-size: 0.72rem; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+        .relation-item { display: flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0; font-size: 0.82rem; }
+        .relation-badge { display: inline-block; padding: 0.12rem 0.5rem; border-radius: 999px; font-size: 0.65rem;
+            font-weight: 700; text-transform: uppercase; }
+        .relation-owner { background: #faf0d4; color: #9a7b2c; }
+        .relation-editor { background: #dce8f8; color: #3b6fb5; }
+        .relation-know { background: var(--sage-bg); color: var(--sage-deep); }
+        .add-relation-form { display: flex; gap: 0.35rem; margin-top: 0.4rem; }
+        .add-relation-form select { flex: 1; margin-bottom: 0; padding: 0.25rem 0.4rem; font-size: 0.72rem; }
+        .add-relation-form select:last-of-type { width: 65px; flex: none; }
+
+        .muted { color: var(--text-muted); font-size: 0.82rem; }
+
+        .debug-section { margin-top: 1rem; }
+        .debug-toggle { cursor: pointer; user-select: none; color: var(--text-muted); font-size: 0.9rem; }
+        .debug-table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; font-size: 0.82rem; }
+        .debug-table th, .debug-table td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+        .debug-table th { color: var(--rose-deep); font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.04em; font-size: 0.72rem; }
+        .debug-table td { color: #5a4d44; font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; }
+
+        .toast { position: fixed; bottom: 2rem; right: 2rem; padding: 0.9rem 1.4rem; border-radius: 999px;
+            color: white; font-weight: 700; z-index: 1000; font-size: 0.88rem;
+            animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards; }
+        .toast-success { background: var(--sage-deep); }
+        .toast-error { background: var(--danger); }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+
+        footer { display: flex; align-items: center; justify-content: space-between; padding: 2rem 2.5rem;
+            color: var(--text-muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 3rem; }
+        footer a { color: var(--rose-deep); text-decoration: none; font-weight: 700; }
+
+        .ai-explain-box { background: white; border-radius: 14px; padding: 1.5rem; margin-bottom: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+        .ai-explain-box h3 { font-family: 'Cormorant Garamond', serif; color: var(--text);
+            margin-bottom: 0.5rem; font-size: 1.2rem; font-weight: 700; }
+        .ai-explain-box p.desc { color: var(--text-muted); font-size: 0.88rem; margin-bottom: 1rem; }
+        .ai-explain-btn { padding: 0.6rem 1.4rem; border-radius: 999px; font-weight: 700; cursor: pointer; border: none;
+            background: var(--warm-dark); color: white; font-family: 'Nunito Sans', sans-serif;
+            font-size: 0.9rem; transition: all 0.2s; }
+        .ai-explain-btn:hover { background: #2c2420; box-shadow: 0 4px 14px rgba(61,48,42,0.25); }
+        .ai-explain-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+        .ai-explain-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white; border-radius: 50%; animation: aispin 0.6s linear infinite; margin-right: 0.4rem; vertical-align: middle; }
+        @keyframes aispin { to { transform: rotate(360deg); } }
+        .ai-explain-result { margin-top: 1rem; padding: 1.25rem; background: var(--bg);
+            border-radius: 12px; line-height: 1.75; font-size: 0.9rem; color: #5a4d44; }
+        .ai-explain-result h1, .ai-explain-result h2, .ai-explain-result h3, .ai-explain-result h4 {
+            font-family: 'Cormorant Garamond', serif; color: var(--text); margin: 1rem 0 0.5rem 0; }
+        .ai-explain-result h1 { font-size: 1.3rem; } .ai-explain-result h2 { font-size: 1.15rem; }
+        .ai-explain-result h3 { font-size: 1.05rem; } .ai-explain-result h4 { font-size: 0.95rem; }
+        .ai-explain-result ul, .ai-explain-result ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+        .ai-explain-result li { margin-bottom: 0.3rem; }
+        .ai-explain-result code { background: var(--rose-bg); padding: 0.12rem 0.4rem; border-radius: 5px;
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; color: var(--rose-deep); }
+        .ai-explain-result strong { color: var(--text); }
+        .ai-explain-error { color: var(--danger); margin-top: 1rem; }
+
+        @media (max-width: 640px) {
+            nav { padding: 0.8rem 1rem; flex-wrap: wrap; gap: 0.75rem; }
+            .nav-links { display: none; }
+            .container { padding: 1.5rem 1.25rem; }
+            .page-header h1 { font-size: 1.9rem; }
+            .top-row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-brand">
+            <div class="nav-logo">A</div>
+            <span class="nav-title">AuthZ POC</span>
+        </div>
+        <div class="nav-links">
+            <a href="/home">Home</a>
+            <a href="/public">Public</a>
+            <a href="/api/protected">Protected</a>
+            <a href="/animals" class="active">Animals</a>
+            <a href="/api/health">Health</a>
+        </div>
+        <div class="nav-user">
+            <div class="user-badge">
+                <div class="user-avatar">{{index .Username 0 | printf "%c"}}</div>
+                <span class="user-name">{{.Username}}</span>
+            </div>
+            <a href="/logout" class="btn-logout">Sign out</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-header">
+            <h1><em>Animals</em></h1>
+            <p>Manage your animals with OpenFGA relationship-based access control. Logged in as <strong>{{.Username}}</strong>.</p>
+        </div>
+
+        <div id="app">Loading...</div>
+    </div>
+
+    <footer>
+        <span>Fine-Grained Authorization POC</span>
+        <a href="/manager" target="_blank">AuthZ Rule Builder &rarr;</a>
+    </footer>
+
+    <script>
+    const currentUser = '{{.Username}}';
+    const apiBase = '/api/animals';
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function showToast(msg, type) {
+        const t = document.createElement('div');
+        t.className = 'toast toast-' + (type || 'success');
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 3000);
+    }
+
+    async function api(path, opts) {
+        const res = await fetch(apiBase + path, {
+            headers: { 'Content-Type': 'application/json', ...(opts?.headers || {}) },
+            ...opts
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Request failed');
+        return data;
+    }
+
+    async function render() {
+        const app = document.getElementById('app');
+        try {
+            const [animalsData, friendsData] = await Promise.all([
+                api('/list'),
+                api('/friends')
+            ]);
+
+            const allAnimals = animalsData.animals || [];
+            const myAnimals = allAnimals.filter(a => a.owner === currentUser);
+            const sharedAnimals = allAnimals.filter(a => a.owner !== currentUser);
+            const friends = friendsData.friends || [];
+            const incoming = friendsData.incoming || [];
+            const outgoing = friendsData.outgoing || [];
+
+            // Known users: from friends, requests, and the two demo users
+            const knownUsers = [...new Set(['alice', 'bob', ...friends])].filter(u => u !== currentUser);
+
+            app.innerHTML = '' +
+                '<div class="top-row">' +
+                '  <div class="card">' +
+                '    <h3>Friends</h3>' +
+                '    <div class="friends-list">' +
+                (friends.length === 0 ? '<p class="muted">No friends yet</p>' :
+                    friends.map(f => '<div class="friend-item"><span>' + escapeHtml(f) + '</span>' +
+                        '<button class="btn btn-danger btn-sm" onclick="removeFriend(\'' + escapeHtml(f) + '\')">Remove</button></div>').join('')) +
+                '    </div>' +
+                (incoming.length > 0 ? '<h4>Incoming Requests</h4>' +
+                    incoming.map(r => '<div class="friend-item"><span>' + escapeHtml(r.from) + '</span>' +
+                        '<button class="btn btn-success btn-sm" onclick="acceptFriend(\'' + r.id + '\')">Accept</button>' +
+                        '<button class="btn btn-danger btn-sm" onclick="denyFriend(\'' + r.id + '\')">Deny</button></div>').join('') : '') +
+                (outgoing.length > 0 ? '<h4>Outgoing Requests</h4>' +
+                    outgoing.map(r => '<div class="friend-item"><span>To: ' + escapeHtml(r.to) + '</span> <span class="muted">pending</span></div>').join('') : '') +
+                '    <div class="friend-request-form">' +
+                '      <input type="text" id="friendTarget" placeholder="Username">' +
+                '      <button class="btn btn-primary btn-sm" onclick="sendFriendRequest()">Send Request</button>' +
+                '    </div>' +
+                '  </div>' +
+                '  <div class="card">' +
+                '    <h3>New Animal</h3>' +
+                '    <input type="text" id="animalName" placeholder="Name">' +
+                '    <input type="text" id="animalSpecies" placeholder="Species">' +
+                '    <input type="number" id="animalAge" placeholder="Age" min="0">' +
+                '    <button class="btn btn-primary" onclick="createAnimal()">Create</button>' +
+                '  </div>' +
+                '</div>' +
+                '<div class="card">' +
+                '  <h3>My Animals</h3>' +
+                '  <div class="animals-grid">' +
+                (myAnimals.length === 0 ? '<p class="muted">No animals yet. Create one above.</p>' :
+                    myAnimals.map(a => renderAnimalCard(a, friends)).join('')) +
+                '  </div>' +
+                '</div>' +
+                (sharedAnimals.length > 0 ? '<div class="card"><h3>Shared With Me</h3><div class="animals-grid">' +
+                    sharedAnimals.map(a => renderAnimalCard(a, friends)).join('') + '</div></div>' : '') +
+                '<div class="card debug-section">' +
+                '  <h3 class="debug-toggle" onclick="toggleDebug()">Debug: OpenFGA Tuples <span id="debugArrow">&#9654;</span></h3>' +
+                '  <div id="debugContent" style="display:none;">' +
+                '    <button class="btn btn-secondary btn-sm" onclick="refreshDebug()">Refresh</button>' +
+                '    <table class="debug-table"><thead><tr><th>User</th><th>Relation</th><th>Object</th></tr></thead>' +
+                '    <tbody id="debugBody"></tbody></table>' +
+                '  </div>' +
+                '</div>' +
+                '<div class="ai-explain-box">' +
+                '  <h3>AuthZ Decision Explained by AI</h3>' +
+                '  <p class="desc">Click the button below to get an AI-powered explanation of your current authorization state — why you can see certain animals and what relationships grant you access.</p>' +
+                '  <button class="ai-explain-btn" id="aiExplainBtn" onclick="requestAIExplanation()">Explain My Authorization</button>' +
+                '  <div id="aiExplainResult"></div>' +
+                '</div>';
+        } catch (e) {
+            app.innerHTML = '<div class="card"><p>Error loading data: ' + escapeHtml(e.message) + '</p></div>';
+        }
+    }
+
+    function renderAnimalCard(animal, friends) {
+        const rels = animal.relations || [];
+        const editable = animal.canEdit;
+        let html = '<div class="animal-card">' +
+            '<div class="animal-card-header"><strong>' + escapeHtml(animal.name) + '</strong>' +
+            (animal.owner !== currentUser ? '<span class="animal-owner">(' + escapeHtml(animal.owner) + ')</span>' : '') +
+            '</div>' +
+            '<span class="species-badge">' + escapeHtml(animal.species) + '</span>' +
+            '<span class="animal-age">' + animal.age + ' yr' + (animal.age !== 1 ? 's' : '') + '</span>';
+
+        if (editable) {
+            html += '<div class="animal-actions">' +
+                '<button class="btn btn-secondary btn-sm" onclick="editAnimal(\'' + animal.id + '\',\'' + escapeHtml(animal.name) + '\',\'' + escapeHtml(animal.species) + '\',' + animal.age + ')">Edit</button>' +
+                '<button class="btn btn-danger btn-sm" onclick="deleteAnimal(\'' + animal.id + '\')">Delete</button>' +
+                '</div>' +
+                '<div class="animal-relations"><h5>Relations</h5>' +
+                (rels.length > 0 ? rels.map(r => '<div class="relation-item">' +
+                    '<span class="relation-badge relation-' + r.relation + '">' + r.relation + '</span>' +
+                    '<span>' + escapeHtml(r.user) + '</span>' +
+                    '<button class="btn btn-danger btn-xs" onclick="removeRelation(\'' + animal.id + '\',\'' + escapeHtml(r.user) + '\',\'' + r.relation + '\')">&times;</button>' +
+                    '</div>').join('') : '<p class="muted">None</p>') +
+                (friends.length > 0 ? '<div class="add-relation-form">' +
+                    '<select id="relUser_' + animal.id + '">' + friends.map(f => '<option value="' + f + '">' + f + '</option>').join('') + '</select>' +
+                    '<select id="relType_' + animal.id + '"><option value="editor">editor</option><option value="know">know</option></select>' +
+                    '<button class="btn btn-primary btn-xs" onclick="addRelation(\'' + animal.id + '\')">+</button></div>' : '<p class="muted">Add friends to assign relations</p>') +
+                '</div>';
+        }
+        html += '</div>';
+        return html;
+    }
+
+    async function createAnimal() {
+        const name = document.getElementById('animalName').value.trim();
+        const species = document.getElementById('animalSpecies').value.trim();
+        const age = parseInt(document.getElementById('animalAge').value) || 0;
+        if (!name) { showToast('Name is required', 'error'); return; }
+        try {
+            await api('/create', { method: 'POST', body: JSON.stringify({ name, species, age }) });
+            showToast('Animal created!');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function editAnimal(id, name, species, age) {
+        const newName = prompt('Name:', name);
+        if (newName === null) return;
+        const newSpecies = prompt('Species:', species);
+        if (newSpecies === null) return;
+        const newAge = prompt('Age:', age);
+        if (newAge === null) return;
+        try {
+            await api('/' + id, { method: 'PUT', body: JSON.stringify({ name: newName, species: newSpecies, age: parseInt(newAge) || 0 }) });
+            showToast('Animal updated!');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function deleteAnimal(id) {
+        if (!confirm('Delete this animal?')) return;
+        try {
+            await api('/' + id, { method: 'DELETE' });
+            showToast('Animal deleted');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function addRelation(animalId) {
+        const u = document.getElementById('relUser_' + animalId);
+        const t = document.getElementById('relType_' + animalId);
+        if (!u || !t) return;
+        try {
+            await api('/' + animalId + '/relations', { method: 'POST', body: JSON.stringify({ targetUser: u.value, relation: t.value }) });
+            showToast('Relation added!');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function removeRelation(animalId, targetUser, relation) {
+        try {
+            await api('/' + animalId + '/relations', { method: 'DELETE', body: JSON.stringify({ targetUser, relation }) });
+            showToast('Relation removed');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function sendFriendRequest() {
+        const input = document.getElementById('friendTarget');
+        const to = input ? input.value.trim() : '';
+        if (!to) return;
+        try {
+            await api('/friends/request', { method: 'POST', body: JSON.stringify({ to }) });
+            showToast('Request sent!');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function acceptFriend(id) {
+        try {
+            await api('/friends/' + id + '/accept', { method: 'POST' });
+            showToast('Friend accepted!');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function denyFriend(id) {
+        try {
+            await api('/friends/' + id + '/deny', { method: 'POST' });
+            showToast('Request denied');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function removeFriend(userId) {
+        if (!confirm('Remove ' + userId + ' as friend?')) return;
+        try {
+            await api('/friends/' + userId, { method: 'DELETE' });
+            showToast('Friend removed');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    function toggleDebug() {
+        const c = document.getElementById('debugContent');
+        const a = document.getElementById('debugArrow');
+        if (c.style.display === 'none') { c.style.display = 'block'; a.innerHTML = '&#9660;'; refreshDebug(); }
+        else { c.style.display = 'none'; a.innerHTML = '&#9654;'; }
+    }
+
+    async function refreshDebug() {
+        try {
+            const data = await api('/debug/tuples');
+            const tbody = document.getElementById('debugBody');
+            if (!tbody) return;
+            const tuples = data.tuples || [];
+            tbody.innerHTML = tuples.length === 0 ? '<tr><td colspan="3" class="muted">No tuples</td></tr>' :
+                tuples.map(t => '<tr><td>' + escapeHtml(t.user) + '</td><td>' + escapeHtml(t.relation) + '</td><td>' + escapeHtml(t.object) + '</td></tr>').join('');
+        } catch (e) { showToast('Error loading tuples', 'error'); }
+    }
+
+    function simpleMarkdown(text) {
+        return text
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+            .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/^\s*[-*] (.+)$/gm, '<li>$1</li>')
+            .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+            .replace(/\n{2,}/g, '<br><br>')
+            .replace(/\n/g, '<br>');
+    }
+
+    async function requestAIExplanation() {
+        const btn = document.getElementById('aiExplainBtn');
+        const resultDiv = document.getElementById('aiExplainResult');
+        if (!btn || !resultDiv) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="ai-explain-spinner"></span>Analyzing...';
+        resultDiv.innerHTML = '';
+
+        try {
+            const [animalsData, friendsData] = await Promise.all([
+                api('/list'),
+                api('/friends')
+            ]);
+
+            const allAnimals = animalsData.animals || [];
+            const myAnimals = allAnimals.filter(a => a.owner === currentUser);
+            const sharedAnimals = allAnimals.filter(a => a.owner !== currentUser);
+            const friends = friendsData.friends || [];
+
+            const res = await fetch('/manager/api/explain-authz', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user: currentUser,
+                    visibleAnimals: allAnimals.map(a => ({ name: a.name, species: a.species, owner: a.owner, canEdit: a.canEdit })),
+                    friends: friends,
+                    myAnimalsCount: myAnimals.length,
+                    sharedAnimalsCount: sharedAnimals.length
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'AI Manager request failed');
+
+            resultDiv.innerHTML = '<div class="ai-explain-result">' + simpleMarkdown(data.explanation) + '</div>';
+        } catch (e) {
+            resultDiv.innerHTML = '<p class="ai-explain-error">Error: ' + escapeHtml(e.message) + '</p>';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Explain My Authorization';
+        }
+    }
+
+    render();
+    </script>
+</body>
+</html>
