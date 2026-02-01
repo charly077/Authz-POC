@@ -377,8 +377,7 @@ generateBtn.addEventListener('click', async () => {
             return;
         }
 
-        outputCard.style.opacity = '1';
-        outputCard.style.pointerEvents = 'all';
+        outputCard.classList.remove('output-disabled');
 
         typeBadge.textContent = data.type || "Unknown";
         codeOutput.textContent = data.code || "No code generated.";
