@@ -178,6 +178,11 @@ authorized if {
 
 authorized if {
     has_valid_token
+    http_request.path == "/home"
+}
+
+authorized if {
+    has_valid_token
     http_request.path == "/callback"
 }
 
