@@ -151,6 +151,8 @@ allow = response if {
 # The home page "/" is accessible to any authenticated user (see below).
 # All /api/* paths require specific rules to grant access.
 
+http_request := input.attributes.request.http
+
 default authorized = false
 
 # Public paths — no auth required
@@ -192,11 +194,22 @@ authorized if {
     http_request.path == "/api/health"
 }
 
-# Protected endpoint — restricted to alice only
-# Protected endpoint — restricted to bob only
+# Protected endpoint — any authenticated user
 authorized if {
     has_valid_token
     http_request.path == "/api/protected"
+}
+
+# Animals page — any authenticated user
+authorized if {
+    has_valid_token
+    http_request.path == "/animals"
+}
+
+# Animals API — any authenticated user (OpenFGA handles per-animal access)
+authorized if {
+    has_valid_token
+    startswith(http_request.path, "/api/animals")
 }
 
 # --- Token Handling (JWKS signature verification) ---
@@ -233,13 +246,9 @@ token_payload := verified_token[2] if {
     verified_token[0] == true
 }
 
-# Fallbacks for when token can't be verified
+# Fallback for when token is missing or invalid
 token_payload := {"preferred_username": "unknown", "realm_access": {"roles": []}} if {
-    not verified_token
-}
-
-token_payload := {"preferred_username": "unknown", "realm_access": {"roles": []}} if {
-    verified_token[0] == false
+    not has_valid_token
 }
 
 # --- Rejection Reasons ---
@@ -263,21 +272,6 @@ get_reason = "Empty or Malformed Token" if {
 get_reason = "Insufficient Permissions (Policy Denied)" if {
     has_valid_token
     not authorized
-}
-
-# --- Helper ---
-
-http_request := input.attributes.request.http
-
-authorized if {
-    has_valid_token
-    http_request.path == "/animals"
-}
-
-# Animals API — any authenticated user (OpenFGA handles per-animal access)
-authorized if {
-    has_valid_token
-    startswith(http_request.path, "/api/animals")
 }
 
 # --- AI Generated Rules (appended by AI Manager) ---

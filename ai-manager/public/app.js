@@ -44,16 +44,18 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.add('active');
         document.getElementById(btn.dataset.tab).classList.add('active');
 
-        if (btn.dataset.tab === 'chat') {
-            loadRules();
-        }
-        if (btn.dataset.tab === 'openfga') {
-            loadFGAStatus();
-            loadTuples();
-            loadModel();
-        }
-        if (btn.dataset.tab === 'visualize') {
-            renderAllViz();
+        switch (btn.dataset.tab) {
+            case 'chat':
+                loadRules();
+                break;
+            case 'openfga':
+                loadFGAStatus();
+                loadTuples();
+                loadModel();
+                break;
+            case 'visualize':
+                renderAllViz();
+                break;
         }
     });
 });
@@ -79,14 +81,12 @@ async function loadFGAStatus() {
 
 async function loadTuples(filters) {
     try {
-        let url = 'api/openfga/tuples';
         const params = new URLSearchParams();
-        if (filters) {
-            if (filters.user) params.set('user', filters.user);
-            if (filters.relation) params.set('relation', filters.relation);
-            if (filters.object) params.set('object', filters.object);
-        }
-        if (params.toString()) url += '?' + params.toString();
+        if (filters?.user) params.set('user', filters.user);
+        if (filters?.relation) params.set('relation', filters.relation);
+        if (filters?.object) params.set('object', filters.object);
+        const query = params.toString();
+        const url = 'api/openfga/tuples' + (query ? '?' + query : '');
 
         const res = await fetch(url);
         const data = await res.json();

@@ -1,5 +1,4 @@
 const express = require('express');
-const bodyParser = require('body-parser');
 const rateLimit = require('express-rate-limit');
 const session = require('express-session');
 const { Issuer, generators } = require('openid-client');
@@ -12,7 +11,7 @@ const app = express();
 const port = 5000;
 
 app.set('trust proxy', 1);
-app.use(bodyParser.json());
+app.use(express.json());
 app.use(express.static('public'));
 
 // CORS — allow both local dev and production origins
@@ -62,6 +61,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "YOUR_API_KEY
 
 const POLICY_PATH = '/policies/policy.rego';
 const OPENFGA_URL = process.env.OPENFGA_URL || 'http://openfga:8080';
+const OPA_URL = process.env.OPA_URL || 'http://opa:8181';
 const CONFIG_FILE = '/shared/openfga-store.json';
 
 // ──────────────────────────────────────
@@ -379,11 +379,8 @@ async function initOIDC() {
 
 // Auth status check
 app.get('/auth/status', (req, res) => {
-    if (req.session && req.session.user) {
-        res.json({ authenticated: true, user: req.session.user });
-    } else {
-        res.json({ authenticated: false });
-    }
+    const user = req.session?.user;
+    res.json(user ? { authenticated: true, user } : { authenticated: false });
 });
 
 // Start OIDC login flow
@@ -463,9 +460,7 @@ app.get('/auth/logout', (req, res) => {
 // ──────────────────────────────────────
 
 app.use('/api', (req, res, next) => {
-    if (req.session && req.session.user) {
-        return next();
-    }
+    if (req.session?.user) return next();
     res.status(401).json({ error: 'Authentication required. Please log in at /manager/auth/login' });
 });
 
@@ -628,7 +623,6 @@ app.post('/api/apply-policy', async (req, res) => {
         const mode = (replaces && replaces.trim()) ? "replaced" : "appended";
         console.log(`Policy ${mode} successfully. Pushing to OPA...`);
 
-        const OPA_URL = process.env.OPA_URL || 'http://opa:8181';
         try {
             await axios.put(`${OPA_URL}/v1/policies/policy.rego`, updatedPolicy, {
                 headers: { 'Content-Type': 'text/plain' }
@@ -655,15 +649,14 @@ app.post('/api/chat', async (req, res) => {
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
         let systemPrompt = `You are an expert Authorization Assistant.
-        You have access to the current OPA Policy and OpenFGA Model.
-        Answer the user's questions about the rules, security implications, or how to modify them.
+You have access to the current OPA Policy and OpenFGA Model.
+Answer the user's questions about the rules, security implications, or how to modify them.
 
-        Current OPA Policy:
-        ${context.opa || "N/A"}
+Current OPA Policy:
+${context.opa || "N/A"}
 
-        Current OpenFGA Model:
-        ${context.openfga || "N/A"}
-        `;
+Current OpenFGA Model:
+${context.openfga || "N/A"}`;
 
         const result = await model.generateContent(systemPrompt + "\nUser: " + message);
         const response = await result.response;
@@ -685,14 +678,9 @@ app.get('/api/openfga/status', (req, res) => {
 app.get('/api/openfga/tuples', async (req, res) => {
     if (!fgaReady) return res.status(503).json({ error: 'OpenFGA not ready' });
     try {
-        const body = {};
         const { user, relation, object } = req.query;
-        if (user || relation || object) {
-            body.tuple_key = {};
-            if (user) body.tuple_key.user = user;
-            if (relation) body.tuple_key.relation = relation;
-            if (object) body.tuple_key.object = object;
-        }
+        const tuple_key = { ...user && { user }, ...relation && { relation }, ...object && { object } };
+        const body = Object.keys(tuple_key).length > 0 ? { tuple_key } : {};
         const result = await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/read`, body);
         const tuples = (result.data.tuples || []).map(t => t.key);
         res.json({ tuples });
@@ -865,7 +853,6 @@ function extractBlock(lines, startLine) {
 
 // Push the current policy to OPA on startup
 async function pushPolicyToOPA() {
-    const OPA_URL = process.env.OPA_URL || 'http://opa:8181';
     const policy = readCurrentPolicy();
     if (!policy) {
         console.error('No policy file found to push to OPA');

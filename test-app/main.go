@@ -254,14 +254,8 @@ func jsonError(w http.ResponseWriter, msg string, status int) {
 }
 
 func wantsJSON(r *http.Request) bool {
-	accept := r.Header.Get("Accept")
-	if strings.Contains(accept, "application/json") {
-		return true
-	}
-	if r.URL.Query().Get("format") == "json" {
-		return true
-	}
-	return false
+	return strings.Contains(r.Header.Get("Accept"), "application/json") ||
+		r.URL.Query().Get("format") == "json"
 }
 
 func getUser(r *http.Request) string {
@@ -1753,9 +1747,8 @@ func handleAnimalsUpdate(w http.ResponseWriter, r *http.Request, id string) {
 	if v := getString(body, "species"); v != "" {
 		animal.Species = v
 	}
-	if v, ok := body["age"]; ok {
+	if _, ok := body["age"]; ok {
 		animal.Age = getInt(body, "age")
-		_ = v
 	}
 	saveData()
 	jsonResponse(w, map[string]interface{}{"id": id, "name": animal.Name, "species": animal.Species, "age": animal.Age, "owner": animal.Owner}, 200)
@@ -2067,8 +2060,6 @@ func handleDebugTuples(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3000"
