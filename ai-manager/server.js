@@ -1,5 +1,8 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const rateLimit = require('express-rate-limit');
+const session = require('express-session');
+const { Issuer, generators } = require('openid-client');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const fs = require('fs');
 const path = require('path');
@@ -8,6 +11,7 @@ const axios = require('axios');
 const app = express();
 const port = 5000;
 
+app.set('trust proxy', 1);
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
@@ -28,6 +32,31 @@ app.use((req, res, next) => {
     }
     next();
 });
+
+// Rate limiter for AI/Gemini endpoints (10 req per 15 min per IP)
+const aiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many AI requests from this IP, please try again after 15 minutes' },
+});
+app.use('/api/generate-rule', aiLimiter);
+app.use('/api/chat', aiLimiter);
+app.use('/api/explain-authz', aiLimiter);
+
+// Session middleware (cookie scoped to / since Envoy rewrites /manager/ → /)
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'change-me-to-a-random-string',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: false,
+        httpOnly: true,
+        maxAge: 3600000,
+        path: '/',
+    },
+}));
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "YOUR_API_KEY");
 
@@ -185,6 +214,264 @@ If the request is better suited for OpenFGA (relationship-based, e.g., "user X i
   "explanation": "<brief explanation>"
 }`;
 }
+
+// ──────────────────────────────────────
+// Explain AuthZ endpoint (called from OPA 403 page)
+// EXEMPTED from auth — must be accessible without AI Manager login.
+// Rate limiting (above) protects it from abuse.
+// ──────────────────────────────────────
+
+app.post('/api/explain-authz', async (req, res) => {
+    const { user, denied, deniedPath, reason, visibleAnimals, friends, myAnimalsCount, sharedAnimalsCount } = req.body;
+    if (!user) {
+        return res.status(400).json({ error: 'user is required' });
+    }
+
+    try {
+        // Gather context
+        const opaPolicy = readCurrentPolicy() || 'Policy not available';
+
+        let fgaModel = 'Not available';
+        let allTuples = [];
+        let userTuples = [];
+
+        if (fgaReady) {
+            try {
+                const modelRes = await axios.get(`${OPENFGA_URL}/stores/${fgaStoreId}/authorization-models/${fgaModelId}`);
+                fgaModel = JSON.stringify(modelRes.data, null, 2);
+            } catch (e) {
+                fgaModel = `Error fetching model: ${e.message}`;
+            }
+
+            try {
+                const allRes = await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/read`, {});
+                allTuples = (allRes.data.tuples || []).map(t => t.key);
+            } catch (e) { /* ignore */ }
+
+            try {
+                const userRes = await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/read`, {
+                    tuple_key: { user: `user:${user}` }
+                });
+                userTuples = (userRes.data.tuples || []).map(t => t.key);
+            } catch (e) { /* ignore */ }
+        }
+
+        let taskPrompt;
+        if (denied) {
+            taskPrompt = `=== SITUATION: ACCESS DENIED ===
+- Username: ${user}
+- Denied path: ${deniedPath}
+- Denial reason: ${reason}
+
+=== YOUR TASK ===
+The user was DENIED access. Respond with EXACTLY 3 short sections using these headers. Be brief and direct — no filler text.
+
+## Quick Explanation
+One or two sentences max. Say what happened: who was denied, what path, and the one-line reason why.
+
+## Step-by-Step: Rules That Blocked You
+Walk through the relevant OPA rules for this path. Show which rule controls "${deniedPath}", what condition failed (e.g. username check), and quote the specific rule as a short code block. If OpenFGA is also relevant, mention it briefly.
+
+## How to Fix It
+One short paragraph: what specific change is needed (e.g. "add alice to the allowed users" or "add a new authorized rule"). Mention they can do this in the AuthZ Rule Builder.
+
+IMPORTANT: Keep the ENTIRE response under 250 words. No introductions, no conclusions, no redundant text. Use bullet points and code blocks for clarity.`;
+        } else {
+            taskPrompt = `=== SITUATION: ACCESS GRANTED ===
+- Username: ${user}
+- Visible animals: ${JSON.stringify(visibleAnimals || [])}
+- Friends: ${JSON.stringify(friends || [])}
+- My animals count: ${myAnimalsCount || 0}
+- Shared animals count: ${sharedAnimalsCount || 0}
+
+=== YOUR TASK ===
+Explain in clear, friendly language:
+1. How OPA granted this user access (which policy rule matched)
+2. How OpenFGA determines which animals this user can see
+3. Specifically why this user sees the animals they see (trace through the tuples)
+4. What the user could do to see more animals or gain edit access
+
+Keep it concise but thorough. Use markdown with headers and bullet points.
+Address the user directly ("You can see..." not "The user can see...").`;
+        }
+
+        const systemPrompt = `You are an authorization explainer for a demo application that uses a TWO-LAYER authorization system.
+
+=== LAYER 1: OPA (Open Policy Agent) ===
+OPA handles coarse-grained, path-level authorization via Envoy external authorization.
+It evaluates whether a user can access an HTTP path based on JWT token claims (username, roles).
+
+Current OPA Policy:
+\`\`\`rego
+${opaPolicy}
+\`\`\`
+
+=== LAYER 2: OpenFGA (Fine-Grained ReBAC) ===
+OpenFGA handles relationship-based access control for the Animals feature.
+It determines which animals a user can view or edit based on ownership, friendships, and relations.
+
+Current OpenFGA Model:
+${fgaModel}
+
+All Tuples in the System:
+${JSON.stringify(allTuples, null, 2)}
+
+Tuples Involving This User (user:${user}):
+${JSON.stringify(userTuples, null, 2)}
+
+${taskPrompt}`;
+
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const result = await model.generateContent(systemPrompt);
+        const response = await result.response;
+        const explanation = response.text();
+
+        res.json({ explanation });
+    } catch (error) {
+        console.error('Explain authz error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ──────────────────────────────────────
+// OIDC Authentication (AIManagerRealm)
+// ──────────────────────────────────────
+
+const KEYCLOAK_INTERNAL_URL = process.env.KEYCLOAK_INTERNAL_URL || 'http://keycloak:8080';
+const KEYCLOAK_EXTERNAL_URL = process.env.KEYCLOAK_EXTERNAL_URL || 'http://localhost:8000/login';
+const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'AIManagerRealm';
+const KEYCLOAK_CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID || 'ai-manager';
+const KEYCLOAK_CLIENT_SECRET = process.env.KEYCLOAK_CLIENT_SECRET || 'ai-manager-secret';
+const EXTERNAL_URL = process.env.EXTERNAL_URL || 'http://localhost:8000';
+
+let oidcClient = null;
+
+async function initOIDC() {
+    const internalIssuerUrl = `${KEYCLOAK_INTERNAL_URL}/realms/${KEYCLOAK_REALM}`;
+    for (let attempt = 1; attempt <= 20; attempt++) {
+        try {
+            const discoveredIssuer = await Issuer.discover(internalIssuerUrl);
+            // Keycloak sets the "iss" claim based on the external URL the browser used,
+            // so override the issuer to match what tokens will contain.
+            const externalIssuerUrl = `${KEYCLOAK_EXTERNAL_URL}/realms/${KEYCLOAK_REALM}`;
+            const issuer = new Issuer({
+                ...discoveredIssuer.metadata,
+                issuer: externalIssuerUrl,
+            });
+            oidcClient = new issuer.Client({
+                client_id: KEYCLOAK_CLIENT_ID,
+                client_secret: KEYCLOAK_CLIENT_SECRET,
+                redirect_uris: [`${EXTERNAL_URL}/manager/auth/callback`],
+                response_types: ['code'],
+            });
+            // Store external endpoints for browser redirects
+            oidcClient._externalAuthorizationUrl = `${externalIssuerUrl}/protocol/openid-connect/auth`;
+            oidcClient._externalEndSessionUrl = `${externalIssuerUrl}/protocol/openid-connect/logout`;
+            console.log('OIDC client initialized for AIManagerRealm');
+            return;
+        } catch (err) {
+            console.log(`Keycloak not ready for OIDC discovery (attempt ${attempt}/20): ${err.message}`);
+            await new Promise(r => setTimeout(r, 3000));
+        }
+    }
+    console.error('Failed to initialize OIDC client after 20 attempts.');
+}
+
+// Auth status check
+app.get('/auth/status', (req, res) => {
+    if (req.session && req.session.user) {
+        res.json({ authenticated: true, user: req.session.user });
+    } else {
+        res.json({ authenticated: false });
+    }
+});
+
+// Start OIDC login flow
+app.get('/auth/login', (req, res) => {
+    if (!oidcClient) {
+        return res.status(503).json({ error: 'OIDC not initialized yet' });
+    }
+    const state = generators.state();
+    const nonce = generators.nonce();
+    req.session.oidcState = state;
+    req.session.oidcNonce = nonce;
+
+    // Use external authorization URL for browser redirect
+    const authUrl = oidcClient._externalAuthorizationUrl +
+        '?client_id=' + encodeURIComponent(KEYCLOAK_CLIENT_ID) +
+        '&redirect_uri=' + encodeURIComponent(`${EXTERNAL_URL}/manager/auth/callback`) +
+        '&response_type=code' +
+        '&scope=openid%20profile%20email' +
+        '&state=' + encodeURIComponent(state) +
+        '&nonce=' + encodeURIComponent(nonce);
+
+    res.redirect(authUrl);
+});
+
+// OIDC callback
+app.get('/auth/callback', async (req, res) => {
+    if (!oidcClient) {
+        return res.status(503).send('OIDC not initialized');
+    }
+    try {
+        const params = oidcClient.callbackParams(req);
+        const tokenSet = await oidcClient.callback(
+            `${EXTERNAL_URL}/manager/auth/callback`,
+            params,
+            {
+                state: req.session.oidcState,
+                nonce: req.session.oidcNonce,
+            }
+        );
+        const claims = tokenSet.claims();
+        req.session.user = {
+            username: claims.preferred_username || claims.sub,
+            email: claims.email,
+            roles: claims.realm_access?.roles || [],
+        };
+        req.session.id_token = tokenSet.id_token;
+        delete req.session.oidcState;
+        delete req.session.oidcNonce;
+        res.redirect('/manager/');
+    } catch (err) {
+        console.error('OIDC callback error:', err);
+        res.status(500).send('Authentication failed: ' + err.message);
+    }
+});
+
+// Logout
+app.get('/auth/logout', (req, res) => {
+    const idToken = req.session?.id_token;
+    req.session.destroy(() => {
+        if (oidcClient && oidcClient._externalEndSessionUrl) {
+            let logoutUrl = oidcClient._externalEndSessionUrl +
+                '?client_id=' + encodeURIComponent(KEYCLOAK_CLIENT_ID) +
+                '&post_logout_redirect_uri=' + encodeURIComponent(`${EXTERNAL_URL}/manager/`);
+            if (idToken) {
+                logoutUrl += '&id_token_hint=' + encodeURIComponent(idToken);
+            }
+            res.redirect(logoutUrl);
+        } else {
+            res.redirect('/manager/');
+        }
+    });
+});
+
+// ──────────────────────────────────────
+// Auth middleware — protects all /api/* routes defined below
+// (explain-authz is mounted above, so it's exempt)
+// ──────────────────────────────────────
+
+app.use('/api', (req, res, next) => {
+    if (req.session && req.session.user) {
+        return next();
+    }
+    res.status(401).json({ error: 'Authentication required. Please log in at /manager/auth/login' });
+});
+
+// ──────────────────────────────────────
+// Protected API routes (require AI Manager login)
+// ──────────────────────────────────────
 
 app.post('/api/generate-rule', async (req, res) => {
     const { prompt } = req.body;
@@ -383,122 +670,6 @@ app.post('/api/chat', async (req, res) => {
         res.json({ reply: response.text() });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// ──────────────────────────────────────
-// Explain AuthZ endpoint (called from Animals page)
-// ──────────────────────────────────────
-
-app.post('/api/explain-authz', async (req, res) => {
-    const { user, denied, deniedPath, reason, visibleAnimals, friends, myAnimalsCount, sharedAnimalsCount } = req.body;
-    if (!user) {
-        return res.status(400).json({ error: 'user is required' });
-    }
-
-    try {
-        // Gather context
-        const opaPolicy = readCurrentPolicy() || 'Policy not available';
-
-        let fgaModel = 'Not available';
-        let allTuples = [];
-        let userTuples = [];
-
-        if (fgaReady) {
-            try {
-                const modelRes = await axios.get(`${OPENFGA_URL}/stores/${fgaStoreId}/authorization-models/${fgaModelId}`);
-                fgaModel = JSON.stringify(modelRes.data, null, 2);
-            } catch (e) {
-                fgaModel = `Error fetching model: ${e.message}`;
-            }
-
-            try {
-                const allRes = await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/read`, {});
-                allTuples = (allRes.data.tuples || []).map(t => t.key);
-            } catch (e) { /* ignore */ }
-
-            try {
-                const userRes = await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/read`, {
-                    tuple_key: { user: `user:${user}` }
-                });
-                userTuples = (userRes.data.tuples || []).map(t => t.key);
-            } catch (e) { /* ignore */ }
-        }
-
-        let taskPrompt;
-        if (denied) {
-            taskPrompt = `=== SITUATION: ACCESS DENIED ===
-- Username: ${user}
-- Denied path: ${deniedPath}
-- Denial reason: ${reason}
-
-=== YOUR TASK ===
-The user was DENIED access. Respond with EXACTLY 3 short sections using these headers. Be brief and direct — no filler text.
-
-## Quick Explanation
-One or two sentences max. Say what happened: who was denied, what path, and the one-line reason why.
-
-## Step-by-Step: Rules That Blocked You
-Walk through the relevant OPA rules for this path. Show which rule controls "${deniedPath}", what condition failed (e.g. username check), and quote the specific rule as a short code block. If OpenFGA is also relevant, mention it briefly.
-
-## How to Fix It
-One short paragraph: what specific change is needed (e.g. "add alice to the allowed users" or "add a new authorized rule"). Mention they can do this in the AuthZ Rule Builder.
-
-IMPORTANT: Keep the ENTIRE response under 250 words. No introductions, no conclusions, no redundant text. Use bullet points and code blocks for clarity.`;
-        } else {
-            taskPrompt = `=== SITUATION: ACCESS GRANTED ===
-- Username: ${user}
-- Visible animals: ${JSON.stringify(visibleAnimals || [])}
-- Friends: ${JSON.stringify(friends || [])}
-- My animals count: ${myAnimalsCount || 0}
-- Shared animals count: ${sharedAnimalsCount || 0}
-
-=== YOUR TASK ===
-Explain in clear, friendly language:
-1. How OPA granted this user access (which policy rule matched)
-2. How OpenFGA determines which animals this user can see
-3. Specifically why this user sees the animals they see (trace through the tuples)
-4. What the user could do to see more animals or gain edit access
-
-Keep it concise but thorough. Use markdown with headers and bullet points.
-Address the user directly ("You can see..." not "The user can see...").`;
-        }
-
-        const systemPrompt = `You are an authorization explainer for a demo application that uses a TWO-LAYER authorization system.
-
-=== LAYER 1: OPA (Open Policy Agent) ===
-OPA handles coarse-grained, path-level authorization via Envoy external authorization.
-It evaluates whether a user can access an HTTP path based on JWT token claims (username, roles).
-
-Current OPA Policy:
-\`\`\`rego
-${opaPolicy}
-\`\`\`
-
-=== LAYER 2: OpenFGA (Fine-Grained ReBAC) ===
-OpenFGA handles relationship-based access control for the Animals feature.
-It determines which animals a user can view or edit based on ownership, friendships, and relations.
-
-Current OpenFGA Model:
-${fgaModel}
-
-All Tuples in the System:
-${JSON.stringify(allTuples, null, 2)}
-
-Tuples Involving This User (user:${user}):
-${JSON.stringify(userTuples, null, 2)}
-
-${taskPrompt}`;
-
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-        const result = await model.generateContent(systemPrompt);
-        const response = await result.response;
-        const explanation = response.text();
-
-        res.json({ explanation });
-    } catch (error) {
-        console.error('Explain authz error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -720,4 +891,5 @@ app.listen(port, () => {
     console.log(`AI Manager listening on port ${port}`);
     pushPolicyToOPA();
     loadFGAConfig();
+    initOIDC();
 });

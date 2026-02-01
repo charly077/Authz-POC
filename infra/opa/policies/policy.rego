@@ -188,39 +188,53 @@ authorized if {
 }
 
 # Protected endpoint — restricted to alice only
+# Protected endpoint — restricted to bob only
 authorized if {
     has_valid_token
     http_request.path == "/api/protected"
 }
 
-# --- Token Handling ---
+# --- Token Handling (JWKS signature verification) ---
 
-has_valid_token if {
+# Fetch JWKS from Keycloak (cached 5 min by http.send)
+jwks_request := http.send({
+    "url": "http://keycloak:8080/login/realms/AuthorizationRealm/protocol/openid-connect/certs",
+    "method": "GET",
+    "force_cache": true,
+    "force_cache_duration_seconds": 300,
+})
+
+jwks := jwks_request.raw_body if {
+    jwks_request.status_code == 200
+}
+
+raw_token := token if {
     auth_header := input.attributes.request.http.headers.authorization
     startswith(auth_header, "Bearer ")
     token := substring(auth_header, 7, -1)
     token != ""
 }
 
-# Decode JWT payload (base64url decode of the second segment)
-token_payload := payload if {
-    auth_header := input.attributes.request.http.headers.authorization
-    token := substring(auth_header, 7, -1)
-    parts := split(token, ".")
-    count(parts) == 3
-    payload := json.unmarshal(base64url.decode(parts[1]))
+# Verify signature against JWKS
+verified_token := [valid, header, payload] if {
+    [valid, header, payload] := io.jwt.decode_verify(raw_token, {"cert": jwks, "time": time.now_ns()})
 }
 
-# Fallback for when token can't be decoded
+has_valid_token if {
+    verified_token[0] == true
+}
+
+token_payload := verified_token[2] if {
+    verified_token[0] == true
+}
+
+# Fallbacks for when token can't be verified
 token_payload := {"preferred_username": "unknown", "realm_access": {"roles": []}} if {
-    not valid_jwt_structure
+    not verified_token
 }
 
-valid_jwt_structure if {
-    auth_header := input.attributes.request.http.headers.authorization
-    token := substring(auth_header, 7, -1)
-    parts := split(token, ".")
-    count(parts) == 3
+token_payload := {"preferred_username": "unknown", "realm_access": {"roles": []}} if {
+    verified_token[0] == false
 }
 
 # --- Rejection Reasons ---

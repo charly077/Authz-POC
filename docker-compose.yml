@@ -17,7 +17,11 @@ services:
   keycloak:
     image: keycloak/keycloak:22.0
     container_name: keycloak
-    command: start-dev --import-realm
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        sed "s|__AI_MANAGER_ADMIN_PASSWORD__|$$AI_MANAGER_ADMIN_PASSWORD|g" /opt/keycloak/data/import/ai-manager-realm.json.tmpl > /opt/keycloak/data/import/ai-manager-realm.json
+        /opt/keycloak/bin/kc.sh start-dev --import-realm
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
@@ -26,8 +30,10 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       KC_HTTP_RELATIVE_PATH: /login
+      AI_MANAGER_ADMIN_PASSWORD: ${AI_MANAGER_ADMIN_PASSWORD:-admin}
     volumes:
       - ./infra/keycloak/realm.json:/opt/keycloak/data/import/realm.json
+      - ./infra/keycloak/ai-manager-realm.json:/opt/keycloak/data/import/ai-manager-realm.json.tmpl
       - ./infra/keycloak/themes:/opt/keycloak/themes
     depends_on:
       - postgres
@@ -106,9 +112,13 @@ services:
     command:
       - |
         sed "s|__EXTERNAL_URL__|$$EXTERNAL_URL|g" /etc/envoy/envoy.yaml.tmpl > /tmp/envoy.yaml
+        sed "s|__TOKEN_SECRET__|$$ENVOY_TOKEN_SECRET|g" /etc/envoy/token_secret.yaml.tmpl > /tmp/token_secret.yaml
+        sed "s|__HMAC_SECRET__|$$ENVOY_HMAC_SECRET|g" /etc/envoy/hmac_secret.yaml.tmpl > /tmp/hmac_secret.yaml
         /usr/local/bin/envoy -c /tmp/envoy.yaml
     container_name: envoy
     enable_ipv6: false
+    env_file:
+      - .env
     environment:
       EXTERNAL_URL: http://localhost:8000
     ports:
@@ -116,8 +126,8 @@ services:
       - "9901:9901" # Admin interface
     volumes:
       - ./infra/envoy/envoy.yaml:/etc/envoy/envoy.yaml.tmpl
-      - ./infra/envoy/token_secret.yaml:/etc/envoy/token_secret.yaml
-      - ./infra/envoy/hmac_secret.yaml:/etc/envoy/hmac_secret.yaml
+      - ./infra/envoy/token_secret.yaml.tmpl:/etc/envoy/token_secret.yaml.tmpl
+      - ./infra/envoy/hmac_secret.yaml.tmpl:/etc/envoy/hmac_secret.yaml.tmpl
     networks:
       - auth-net
 
@@ -148,6 +158,13 @@ services:
     environment:
       OPA_URL: http://opa:8181
       OPENFGA_URL: http://openfga:8080
+      KEYCLOAK_INTERNAL_URL: http://keycloak:8080/login
+      KEYCLOAK_EXTERNAL_URL: http://localhost:8000/login
+      KEYCLOAK_REALM: AIManagerRealm
+      KEYCLOAK_CLIENT_ID: ai-manager
+      KEYCLOAK_CLIENT_SECRET: ${AI_MANAGER_CLIENT_SECRET:-ai-manager-secret}
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-random-string}
+      EXTERNAL_URL: http://localhost:8000
     volumes:
       - ./infra/opa/policies:/policies
       - openfga_config:/shared:ro
