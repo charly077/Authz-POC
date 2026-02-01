@@ -453,15 +453,25 @@ function renderArchitectureDiagram() {
     KC -->|"JWT token<br/>via /callback"| Envoy
     Envoy -->|"ext_authz<br/>gRPC"| OPA["OPA<br/>(Policy Engine)"]:::opa
     OPA -->|"allow / deny"| Envoy
-    Envoy -->|"if allowed<br/>(forwards JWT)"| App["Node.js<br/>App"]:::app
+    Envoy -->|"if allowed<br/>(forwards JWT)"| App["AI Manager<br/>(Node.js)"]:::app
+    Envoy -->|"if allowed<br/>(forwards JWT)"| TestApp["Test-App<br/>(Go)"]:::testapp
     App -->|"ReBAC checks"| FGA["OpenFGA<br/>(Fine-Grained)"]:::fga
+    TestApp -->|"ReBAC checks"| FGA
+    KC --> PG["PostgreSQL"]:::db
+    FGA --> PG
+    Envoy -->|"/grafana"| Grafana["Grafana<br/>(Dashboards)"]:::obs
+    Promtail["Promtail<br/>(Log Collector)"]:::obs -->|"ships logs"| Loki["Loki<br/>(Log Store)"]:::obs
+    Grafana -->|"queries"| Loki
 
     classDef client fill:#3b82f6,stroke:#1d4ed8,color:#fff
     classDef proxy fill:#8b5cf6,stroke:#6d28d9,color:#fff
     classDef opa fill:#22d3ee,stroke:#0891b2,color:#0f172a
     classDef app fill:#10b981,stroke:#059669,color:#fff
+    classDef testapp fill:#059669,stroke:#047857,color:#fff
     classDef fga fill:#f59e0b,stroke:#d97706,color:#0f172a
-    classDef kc fill:#ef4444,stroke:#dc2626,color:#fff`;
+    classDef kc fill:#ef4444,stroke:#dc2626,color:#fff
+    classDef db fill:#6366f1,stroke:#4f46e5,color:#fff
+    classDef obs fill:#f472b6,stroke:#db2777,color:#fff`;
 
     renderMermaidDiagram('archContainer', def);
 }

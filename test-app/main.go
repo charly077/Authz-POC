@@ -43,7 +43,9 @@ func loadFGAConfig() {
 		data, err := os.ReadFile(configPath)
 		if err == nil {
 			var cfg fgaConfig
-			if json.Unmarshal(data, &cfg) == nil && cfg.StoreId != "" && cfg.ModelId != "" {
+			if unmarshalErr := json.Unmarshal(data, &cfg); unmarshalErr != nil {
+				log.Printf("WARNING: failed to parse FGA config: %v", unmarshalErr)
+			} else if cfg.StoreId != "" && cfg.ModelId != "" {
 				fgaStoreId = cfg.StoreId
 				fgaModelId = cfg.ModelId
 				fgaReady = true
@@ -75,7 +77,9 @@ func fgaRequest(method, path string, body interface{}) (map[string]interface{}, 
 	}
 	defer resp.Body.Close()
 	var result map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&result)
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode FGA response: %w", err)
+	}
 	return result, nil
 }
 
@@ -217,7 +221,7 @@ var (
 		FriendRequests: []FriendRequest{},
 		Friends:        make(map[string][]string),
 	}
-	dataMu   sync.Mutex
+	dataMu   sync.RWMutex
 	dataFile = "/data/animals.json"
 )
 
@@ -228,7 +232,10 @@ func loadData() {
 	}
 	dataMu.Lock()
 	defer dataMu.Unlock()
-	json.Unmarshal(data, dataStore)
+	if err := json.Unmarshal(data, dataStore); err != nil {
+		log.Printf("WARNING: failed to unmarshal data file: %v", err)
+		return
+	}
 	if dataStore.Animals == nil {
 		dataStore.Animals = make(map[string]*Animal)
 	}
@@ -313,10 +320,12 @@ func getUser(r *http.Request) string {
 	return user
 }
 
-func readBody(r *http.Request) map[string]interface{} {
+func readBody(r *http.Request) (map[string]interface{}, error) {
 	var m map[string]interface{}
-	json.NewDecoder(r.Body).Decode(&m)
-	return m
+	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+		return nil, fmt.Errorf("failed to decode request body: %w", err)
+	}
+	return m, nil
 }
 
 func getString(m map[string]interface{}, key string) string {
@@ -1720,6 +1729,7 @@ func handleAnimalsList(w http.ResponseWriter, r *http.Request) {
 		Relations []Relation `json:"relations,omitempty"`
 	}
 
+	dataMu.RLock()
 	var animals []animalResp
 	for _, obj := range visibleIds {
 		id := strings.TrimPrefix(obj, "animal:")
@@ -1733,6 +1743,7 @@ func handleAnimalsList(w http.ResponseWriter, r *http.Request) {
 			Owner: a.Owner, CanEdit: canEdit, Relations: a.Relations,
 		})
 	}
+	dataMu.RUnlock()
 	if animals == nil {
 		animals = []animalResp{}
 	}
@@ -1745,7 +1756,11 @@ func handleAnimalsCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := getUser(r)
-	body := readBody(r)
+	body, err := readBody(r)
+	if err != nil {
+		jsonError(w, "Invalid request body", 400)
+		return
+	}
 	name := getString(body, "name")
 	if name == "" {
 		jsonError(w, "Name is required", 400)
@@ -1759,12 +1774,16 @@ func handleAnimalsCreate(w http.ResponseWriter, r *http.Request) {
 
 	id := randId()
 	animal := &Animal{Name: name, Species: species, Age: age, Owner: user}
+	dataMu.Lock()
 	dataStore.Animals[id] = animal
+	dataMu.Unlock()
 	saveData()
 
-	err := fgaWrite([]tupleKey{{User: "user:" + user, Relation: "owner", Object: "animal:" + id}}, nil)
+	err = fgaWrite([]tupleKey{{User: "user:" + user, Relation: "owner", Object: "animal:" + id}}, nil)
 	if err != nil {
+		dataMu.Lock()
 		delete(dataStore.Animals, id)
+		dataMu.Unlock()
 		saveData()
 		jsonError(w, err.Error(), 500)
 		return
@@ -1787,7 +1806,11 @@ func handleAnimalsUpdate(w http.ResponseWriter, r *http.Request, id string) {
 		jsonError(w, "Not authorized to edit this animal", 403)
 		return
 	}
-	body := readBody(r)
+	body, err := readBody(r)
+	if err != nil {
+		jsonError(w, "Invalid request body", 400)
+		return
+	}
 	if v := getString(body, "name"); v != "" {
 		animal.Name = v
 	}
@@ -1824,7 +1847,9 @@ func handleAnimalsDelete(w http.ResponseWriter, r *http.Request, id string) {
 		deletes = append(deletes, tupleKey{User: "user:" + rel.User, Relation: rel.Relation, Object: "animal:" + id})
 	}
 	fgaWrite(nil, deletes)
+	dataMu.Lock()
 	delete(dataStore.Animals, id)
+	dataMu.Unlock()
 	saveData()
 	jsonResponse(w, map[string]bool{"success": true}, 200)
 }
@@ -1862,7 +1887,11 @@ func handleAnimalsRelationsAdd(w http.ResponseWriter, r *http.Request, id string
 		jsonError(w, "Animal not found", 404)
 		return
 	}
-	body := readBody(r)
+	body, err := readBody(r)
+	if err != nil {
+		jsonError(w, "Invalid request body", 400)
+		return
+	}
 	targetUser := getString(body, "targetUser")
 	relation := getString(body, "relation")
 	if targetUser == "" || relation == "" {
@@ -1888,7 +1917,7 @@ func handleAnimalsRelationsAdd(w http.ResponseWriter, r *http.Request, id string
 			return
 		}
 	}
-	err := fgaWrite([]tupleKey{{User: "user:" + targetUser, Relation: relation, Object: "animal:" + id}}, nil)
+	err = fgaWrite([]tupleKey{{User: "user:" + targetUser, Relation: relation, Object: "animal:" + id}}, nil)
 	if err != nil {
 		jsonError(w, err.Error(), 500)
 		return
@@ -1909,7 +1938,11 @@ func handleAnimalsRelationsDelete(w http.ResponseWriter, r *http.Request, id str
 		jsonError(w, "Animal not found", 404)
 		return
 	}
-	body := readBody(r)
+	body, err := readBody(r)
+	if err != nil {
+		jsonError(w, "Invalid request body", 400)
+		return
+	}
 	targetUser := getString(body, "targetUser")
 	relation := getString(body, "relation")
 	if targetUser == "" || relation == "" {
@@ -1958,7 +1991,11 @@ func handleFriendsList(w http.ResponseWriter, r *http.Request) {
 
 func handleFriendsRequest(w http.ResponseWriter, r *http.Request) {
 	user := getUser(r)
-	body := readBody(r)
+	body, err := readBody(r)
+	if err != nil {
+		jsonError(w, "Invalid request body", 400)
+		return
+	}
 	to := getString(body, "to")
 	if to == "" || to == user {
 		jsonError(w, "Invalid target user", 400)
@@ -1975,7 +2012,9 @@ func handleFriendsRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	id := randId()
+	dataMu.Lock()
 	dataStore.FriendRequests = append(dataStore.FriendRequests, FriendRequest{Id: id, From: user, To: to, Status: "pending"})
+	dataMu.Unlock()
 	saveData()
 	jsonResponse(w, map[string]interface{}{"success": true, "id": id}, 200)
 }
@@ -2005,6 +2044,7 @@ func handleFriendsAccept(w http.ResponseWriter, r *http.Request, reqId string) {
 		jsonError(w, "Request already handled", 400)
 		return
 	}
+	dataMu.Lock()
 	found.Status = "accepted"
 	if dataStore.Friends[user] == nil {
 		dataStore.Friends[user] = []string{}
@@ -2014,6 +2054,7 @@ func handleFriendsAccept(w http.ResponseWriter, r *http.Request, reqId string) {
 	}
 	dataStore.Friends[user] = append(dataStore.Friends[user], found.From)
 	dataStore.Friends[found.From] = append(dataStore.Friends[found.From], user)
+	dataMu.Unlock()
 	saveData()
 
 	fgaWrite([]tupleKey{
@@ -2047,6 +2088,7 @@ func handleFriendsRemove(w http.ResponseWriter, r *http.Request, userId string) 
 		return
 	}
 	user := getUser(r)
+	dataMu.Lock()
 	if friends, ok := dataStore.Friends[user]; ok {
 		var filtered []string
 		for _, f := range friends {
@@ -2065,6 +2107,7 @@ func handleFriendsRemove(w http.ResponseWriter, r *http.Request, userId string) 
 		}
 		dataStore.Friends[userId] = filtered
 	}
+	dataMu.Unlock()
 	saveData()
 
 	fgaWrite(nil, []tupleKey{

@@ -3,9 +3,72 @@ const rateLimit = require('express-rate-limit');
 const session = require('express-session');
 const { Issuer, generators } = require('openid-client');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { z } = require('zod');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+
+// ──────────────────────────────────────
+// Input validation schemas
+// ──────────────────────────────────────
+const explainAuthzSchema = z.object({
+    user: z.string().min(1).max(100),
+    denied: z.boolean().optional(),
+    deniedPath: z.string().max(500).optional(),
+    reason: z.string().max(1000).optional(),
+    visibleAnimals: z.array(z.string().max(200)).max(100).optional(),
+    friends: z.array(z.string().max(100)).max(100).optional(),
+    myAnimalsCount: z.number().int().min(0).max(10000).optional(),
+    sharedAnimalsCount: z.number().int().min(0).max(10000).optional(),
+});
+
+const generateRuleSchema = z.object({
+    prompt: z.string().min(1).max(2000),
+});
+
+const applyPolicySchema = z.object({
+    code: z.string().min(1).max(10000),
+    replaces: z.string().max(10000).optional(),
+});
+
+const chatSchema = z.object({
+    message: z.string().min(1).max(2000),
+    context: z.object({
+        opa: z.string().max(50000).optional(),
+        openfga: z.string().max(50000).optional(),
+    }).optional(),
+});
+
+const tupleSchema = z.object({
+    user: z.string().min(1).max(200),
+    relation: z.string().min(1).max(100),
+    object: z.string().min(1).max(200),
+});
+
+const auditEntrySchema = z.object({
+    source: z.string().min(1).max(50),
+    decision: z.string().max(50).optional(),
+    user: z.string().max(200).optional(),
+    path: z.string().max(500).optional(),
+    resource: z.string().max(200).optional(),
+    relation: z.string().max(100).optional(),
+    method: z.string().max(20).optional(),
+    reason: z.string().max(1000).optional(),
+});
+
+function validate(schema) {
+    return (req, res, next) => {
+        const result = schema.safeParse(req.body);
+        if (!result.success) {
+            return res.status(400).json({
+                error: 'Validation failed',
+                details: result.error.issues.map(i => ({ path: i.path.join('.'), message: i.message })),
+            });
+        }
+        req.body = result.data;
+        next();
+    };
+}
 
 const app = express();
 const port = 5000;
@@ -44,9 +107,20 @@ app.use('/api/generate-rule', aiLimiter);
 app.use('/api/chat', aiLimiter);
 app.use('/api/explain-authz', aiLimiter);
 
+// ──────────────────────────────────────
+// Required environment variables — fail fast if missing
+// ──────────────────────────────────────
+const REQUIRED_ENV = ['SESSION_SECRET', 'GEMINI_API_KEY'];
+for (const envVar of REQUIRED_ENV) {
+    if (!process.env[envVar]) {
+        console.error(`FATAL: Required environment variable ${envVar} is not set`);
+        process.exit(1);
+    }
+}
+
 // Session middleware (cookie scoped to / since Envoy rewrites /manager/ → /)
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'change-me-to-a-random-string',
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -57,7 +131,7 @@ app.use(session({
     },
 }));
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "YOUR_API_KEY");
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const POLICY_PATH = '/policies/policy.rego';
 const OPENFGA_URL = process.env.OPENFGA_URL || 'http://openfga:8080';
@@ -249,7 +323,7 @@ If the request is better suited for OpenFGA (relationship-based, e.g., "user X i
 // Rate limiting (above) protects it from abuse.
 // ──────────────────────────────────────
 
-app.post('/api/explain-authz', async (req, res) => {
+app.post('/api/explain-authz', validate(explainAuthzSchema), async (req, res) => {
     const { user, denied, deniedPath, reason, visibleAnimals, friends, myAnimalsCount, sharedAnimalsCount } = req.body;
     if (!user) {
         return res.status(400).json({ error: 'user is required' });
@@ -532,9 +606,9 @@ app.post('/logs', (req, res) => {
 // Test-app POSTs individual audit entries here
 // ──────────────────────────────────────
 
-app.post('/audit', (req, res) => {
+app.post('/audit', validate(auditEntrySchema), (req, res) => {
     try {
-        const entry = req.body || {};
+        const entry = req.body;
         if (entry.source) {
             addAuditLog({
                 source: entry.source,
@@ -589,11 +663,8 @@ app.get('/api/audit', (req, res) => {
 // Protected API routes (require AI Manager login)
 // ──────────────────────────────────────
 
-app.post('/api/generate-rule', async (req, res) => {
+app.post('/api/generate-rule', validate(generateRuleSchema), async (req, res) => {
     const { prompt } = req.body;
-    if (!prompt) {
-        return res.status(400).json({ error: "No prompt provided" });
-    }
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
         const currentPolicy = readCurrentPolicy() || "Policy not available";
@@ -654,11 +725,8 @@ const FORBIDDEN_PATTERNS = [
     /input\.method(?!\s)/,
 ];
 
-app.post('/api/apply-policy', async (req, res) => {
+app.post('/api/apply-policy', validate(applyPolicySchema), async (req, res) => {
     const { code, replaces } = req.body;
-    if (!code) {
-        return res.status(400).json({ success: false, error: "No policy code provided" });
-    }
 
     for (const pattern of FORBIDDEN_PATTERNS) {
         if (pattern.test(code)) {
@@ -764,7 +832,7 @@ app.post('/api/apply-policy', async (req, res) => {
     }
 });
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', validate(chatSchema), async (req, res) => {
     const { message, context } = req.body;
     try {
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
@@ -810,12 +878,9 @@ app.get('/api/openfga/tuples', async (req, res) => {
     }
 });
 
-app.post('/api/openfga/tuples', async (req, res) => {
+app.post('/api/openfga/tuples', validate(tupleSchema), async (req, res) => {
     if (!fgaReady) return res.status(503).json({ error: 'OpenFGA not ready' });
     const { user, relation, object } = req.body;
-    if (!user || !relation || !object) {
-        return res.status(400).json({ error: 'user, relation, and object are required' });
-    }
     try {
         await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/write`, {
             writes: { tuple_keys: [{ user, relation, object }] }
@@ -834,12 +899,9 @@ app.post('/api/openfga/tuples', async (req, res) => {
     }
 });
 
-app.delete('/api/openfga/tuples', async (req, res) => {
+app.delete('/api/openfga/tuples', validate(tupleSchema), async (req, res) => {
     if (!fgaReady) return res.status(503).json({ error: 'OpenFGA not ready' });
     const { user, relation, object } = req.body;
-    if (!user || !relation || !object) {
-        return res.status(400).json({ error: 'user, relation, and object are required' });
-    }
     try {
         await axios.post(`${OPENFGA_URL}/stores/${fgaStoreId}/write`, {
             deletes: { tuple_keys: [{ user, relation, object }] }

@@ -138,7 +138,7 @@
                 </div>
                 <div class="mermaid-container" id="archContainer"></div>
                 <div class="arch-explanation">
-                    <p>This system uses a <strong>two-layer authorization</strong> architecture to secure every request.</p>
+                    <p>This system uses a <strong>two-layer authorization</strong> architecture to secure every request, backed by a shared PostgreSQL database and a centralized observability stack.</p>
                     <div class="arch-grid">
                         <div class="arch-item">
                             <h4>Envoy Proxy</h4>
@@ -155,6 +155,22 @@
                         <div class="arch-item">
                             <h4>OpenFGA</h4>
                             <p>Handles <strong>fine-grained, relationship-based</strong> access control (ReBAC). Called by the application (not Envoy) to check per-object permissions. Models ownership, friendship, and sharing relationships between users and resources. Answers: <em>"Can this user view/edit this specific object?"</em></p>
+                        </div>
+                        <div class="arch-item">
+                            <h4>Test-App (Go)</h4>
+                            <p>A protected demo application written in Go that sits behind Envoy. Demonstrates ReBAC integration by calling OpenFGA for per-object permission checks. Serves as a reference implementation for services consuming the authorization stack.</p>
+                        </div>
+                        <div class="arch-item">
+                            <h4>PostgreSQL</h4>
+                            <p>Shared relational database backing both <strong>Keycloak</strong> (user accounts, realm config, sessions) and <strong>OpenFGA</strong> (authorization model, relationship tuples). A single instance with separate logical databases keeps the deployment simple.</p>
+                        </div>
+                        <div class="arch-item">
+                            <h4>Loki + Promtail</h4>
+                            <p><strong>Promtail</strong> tails container logs from every service and ships them to <strong>Loki</strong>, a lightweight log-aggregation engine. Together they provide centralised, searchable logging with label-based indexing and a 72-hour retention window.</p>
+                        </div>
+                        <div class="arch-item">
+                            <h4>Grafana</h4>
+                            <p>Observability dashboard routed behind Envoy at <code>/grafana</code> with Keycloak SSO. Queries Loki for log exploration, provides pre-built dashboards for authorization decisions, error rates, and system health. Acts as the single pane of glass for the platform.</p>
                         </div>
                     </div>
                     <div class="arch-item arch-comparison">
