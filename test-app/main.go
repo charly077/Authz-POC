@@ -56,9 +56,12 @@ func main() {
 	})
 
 	http.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
+		for _, name := range []string{"BearerToken", "OauthHMAC", "OauthExpires"} {
+			http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1})
+		}
 		keycloakLogout := config.ExternalURL + "/login/realms/AuthorizationRealm/protocol/openid-connect/logout" +
 			"?client_id=envoy" +
-			"&post_logout_redirect_uri=" + url.QueryEscape(config.ExternalURL+"/signout")
+			"&post_logout_redirect_uri=" + url.QueryEscape(config.ExternalURL+"/public")
 		http.Redirect(w, r, keycloakLogout, http.StatusFound)
 	})
 
