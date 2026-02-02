@@ -91,18 +91,40 @@ async function writeAuthModel(storeId) {
                 }
             },
             {
+                type: 'organization',
+                relations: {
+                    member: { this: {} }
+                },
+                metadata: {
+                    relations: {
+                        member: { directly_related_user_types: [{ type: 'user' }] }
+                    }
+                }
+            },
+            {
                 type: 'dossier',
                 relations: {
                     owner: { this: {} },
                     mandate_holder: { this: {} },
-                    viewer: {
+                    org_parent: { this: {} },
+                    blocked: { this: {} },
+                    public: { this: {} },
+                    can_view: {
                         union: {
                             child: [
                                 { this: {} },
                                 { computedUserset: { relation: 'owner' } },
                                 { computedUserset: { relation: 'mandate_holder' } },
-                                { tupleToUserset: { tupleset: { relation: 'owner' }, computedUserset: { relation: 'guardian' } } }
+                                { tupleToUserset: { tupleset: { relation: 'owner' }, computedUserset: { relation: 'guardian' } } },
+                                { tupleToUserset: { tupleset: { relation: 'org_parent' }, computedUserset: { relation: 'member' } } },
+                                { computedUserset: { relation: 'public' } }
                             ]
+                        }
+                    },
+                    viewer: {
+                        difference: {
+                            base: { computedUserset: { relation: 'can_view' } },
+                            subtract: { computedUserset: { relation: 'blocked' } }
                         }
                     },
                     editor: {
@@ -119,6 +141,10 @@ async function writeAuthModel(storeId) {
                     relations: {
                         owner: { directly_related_user_types: [{ type: 'user' }] },
                         mandate_holder: { directly_related_user_types: [{ type: 'user' }] },
+                        org_parent: { directly_related_user_types: [{ type: 'organization' }] },
+                        blocked: { directly_related_user_types: [{ type: 'user' }] },
+                        public: { directly_related_user_types: [{ type: 'user', wildcard: {} }] },
+                        can_view: { directly_related_user_types: [{ type: 'user' }] },
                         viewer: { directly_related_user_types: [{ type: 'user' }] },
                         editor: { directly_related_user_types: [{ type: 'user' }] }
                     }

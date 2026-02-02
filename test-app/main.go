@@ -119,6 +119,32 @@ func main() {
 			handlers.GuardianshipRequest(w, r)
 		}
 	})
+	http.HandleFunc("/api/dossiers/organizations", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "GET":
+			handlers.OrganizationsList(w, r)
+		case "POST":
+			handlers.OrganizationsCreate(w, r)
+		default:
+			httputil.JSONError(w, "Method not allowed", 405)
+		}
+	})
+	http.HandleFunc("/api/dossiers/organizations/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/dossiers/organizations/")
+		parts := strings.Split(path, "/")
+		if len(parts) == 2 && parts[1] == "members" {
+			switch r.Method {
+			case "POST":
+				handlers.OrganizationsAddMember(w, r, parts[0])
+			case "DELETE":
+				handlers.OrganizationsRemoveMember(w, r, parts[0])
+			default:
+				httputil.JSONError(w, "Method not allowed", 405)
+			}
+			return
+		}
+		httputil.JSONError(w, "Not found", 404)
+	})
 	http.HandleFunc("/api/dossiers/debug/tuples", func(w http.ResponseWriter, r *http.Request) {
 		handlers.DebugTuples(w, r)
 	})
@@ -146,7 +172,7 @@ func main() {
 		path := strings.TrimPrefix(r.URL.Path, "/api/dossiers/")
 		if strings.HasPrefix(path, "list") || strings.HasPrefix(path, "create") ||
 			strings.HasPrefix(path, "guardianships") || strings.HasPrefix(path, "debug") ||
-			strings.HasPrefix(path, "status") {
+			strings.HasPrefix(path, "status") || strings.HasPrefix(path, "organizations") {
 			return
 		}
 
@@ -175,6 +201,22 @@ func main() {
 			default:
 				httputil.JSONError(w, "Method not allowed", 405)
 			}
+			return
+		}
+		if len(parts) == 2 && parts[1] == "toggle-public" && r.Method == "POST" {
+			handlers.DossiersTogglePublic(w, r, parts[0])
+			return
+		}
+		if len(parts) == 2 && parts[1] == "block" && r.Method == "POST" {
+			handlers.DossiersBlock(w, r, parts[0])
+			return
+		}
+		if len(parts) == 2 && parts[1] == "unblock" && r.Method == "POST" {
+			handlers.DossiersUnblock(w, r, parts[0])
+			return
+		}
+		if len(parts) == 2 && parts[1] == "emergency-check" && r.Method == "POST" {
+			handlers.DossiersEmergencyCheck(w, r, parts[0])
 			return
 		}
 		httputil.JSONError(w, "Not found", 404)

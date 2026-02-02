@@ -79,6 +79,34 @@ func Check(user, relation, object string) bool {
 	return allowed
 }
 
+func CheckWithContext(user, relation, object string, contextualTuples []store.TupleKey) bool {
+	tupleKeys := make([]map[string]string, 0, len(contextualTuples))
+	for _, t := range contextualTuples {
+		tupleKeys = append(tupleKeys, map[string]string{
+			"user": t.User, "relation": t.Relation, "object": t.Object,
+		})
+	}
+	body := map[string]interface{}{
+		"tuple_key":              map[string]string{"user": user, "relation": relation, "object": object},
+		"authorization_model_id": config.FgaModelId,
+		"contextual_tuples":      map[string]interface{}{"tuple_keys": tupleKeys},
+	}
+	result, err := Request("POST", "/stores/"+config.FgaStoreId+"/check", body)
+	if err != nil {
+		audit.SendAuditLog("OpenFGA", "deny", user, relation, object, "CHECK_CONTEXT", "Error: "+err.Error())
+		return false
+	}
+	allowed, _ := result["allowed"].(bool)
+	decision := "deny"
+	reason := user + " does not have " + relation + " on " + object + " (contextual)"
+	if allowed {
+		decision = "allow"
+		reason = user + " has " + relation + " on " + object + " (contextual)"
+	}
+	audit.SendAuditLog("OpenFGA", decision, user, relation, object, "CHECK_CONTEXT", reason)
+	return allowed
+}
+
 func ListObjects(user, relation, typeName string) []string {
 	body := map[string]interface{}{
 		"user":                   user,

@@ -155,6 +155,117 @@ func TestLoadSave_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestRehydrateTuples_WithOrg(t *testing.T) {
+	origData := Data
+	defer func() { Data = origData }()
+
+	Data = &DataStore{
+		Dossiers: map[string]*Dossier{
+			"d1": {Title: "Org Doc", Owner: "alice", OrgId: "org1"},
+		},
+		GuardianshipRequests: []GuardianshipRequest{},
+		Guardianships:        make(map[string][]string),
+		Organizations: map[string]*Organization{
+			"org1": {Name: "BOSA", Members: []string{"bob", "charlie"}},
+		},
+	}
+
+	var allWrites []TupleKey
+	fgaWrite := func(writes []TupleKey, deletes []TupleKey) error {
+		allWrites = append(allWrites, writes...)
+		return nil
+	}
+	RehydrateTuples(fgaWrite)
+
+	// Expect: owner (1) + org_parent (1) + 2 org members = 4
+	if len(allWrites) != 4 {
+		t.Errorf("total writes = %d, want 4; writes: %+v", len(allWrites), allWrites)
+	}
+
+	// Verify org_parent tuple exists
+	found := false
+	for _, w := range allWrites {
+		if w.Relation == "org_parent" && w.User == "organization:org1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("org_parent tuple not found in writes")
+	}
+}
+
+func TestRehydrateTuples_WithPublic(t *testing.T) {
+	origData := Data
+	defer func() { Data = origData }()
+
+	Data = &DataStore{
+		Dossiers: map[string]*Dossier{
+			"d1": {Title: "Public Doc", Owner: "alice", Public: true},
+		},
+		GuardianshipRequests: []GuardianshipRequest{},
+		Guardianships:        make(map[string][]string),
+		Organizations:        make(map[string]*Organization),
+	}
+
+	var allWrites []TupleKey
+	fgaWrite := func(writes []TupleKey, deletes []TupleKey) error {
+		allWrites = append(allWrites, writes...)
+		return nil
+	}
+	RehydrateTuples(fgaWrite)
+
+	// Expect: owner (1) + public wildcard (1) = 2
+	if len(allWrites) != 2 {
+		t.Errorf("total writes = %d, want 2; writes: %+v", len(allWrites), allWrites)
+	}
+
+	found := false
+	for _, w := range allWrites {
+		if w.Relation == "public" && w.User == "user:*" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("public wildcard tuple not found in writes")
+	}
+}
+
+func TestRehydrateTuples_WithBlocked(t *testing.T) {
+	origData := Data
+	defer func() { Data = origData }()
+
+	Data = &DataStore{
+		Dossiers: map[string]*Dossier{
+			"d1": {Title: "Blocked Doc", Owner: "alice", BlockedUsers: []string{"bob", "charlie"}},
+		},
+		GuardianshipRequests: []GuardianshipRequest{},
+		Guardianships:        make(map[string][]string),
+		Organizations:        make(map[string]*Organization),
+	}
+
+	var allWrites []TupleKey
+	fgaWrite := func(writes []TupleKey, deletes []TupleKey) error {
+		allWrites = append(allWrites, writes...)
+		return nil
+	}
+	RehydrateTuples(fgaWrite)
+
+	// Expect: owner (1) + blocked (2) = 3
+	if len(allWrites) != 3 {
+		t.Errorf("total writes = %d, want 3; writes: %+v", len(allWrites), allWrites)
+	}
+
+	blockedCount := 0
+	for _, w := range allWrites {
+		if w.Relation == "blocked" {
+			blockedCount++
+		}
+	}
+	if blockedCount != 2 {
+		t.Errorf("blocked tuples = %d, want 2", blockedCount)
+	}
+}
+
 func TestLoad_MissingFile(t *testing.T) {
 	origFile := dataFile
 	defer func() { dataFile = origFile }()

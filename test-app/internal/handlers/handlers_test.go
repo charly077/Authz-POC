@@ -44,6 +44,7 @@ func resetStore(t *testing.T) func() {
 		Dossiers:             make(map[string]*store.Dossier),
 		GuardianshipRequests: []store.GuardianshipRequest{},
 		Guardianships:        make(map[string][]string),
+		Organizations:        make(map[string]*store.Organization),
 	}
 	return func() {
 		store.Data = origData
@@ -305,6 +306,449 @@ func TestDebugTuples_FgaNotReady(t *testing.T) {
 
 	if w.Code != 503 {
 		t.Errorf("status = %d, want 503", w.Code)
+	}
+}
+
+// Scenario A: Organization-Based Access
+
+func TestOrganizationsCreate(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/organizations", strings.NewReader(`{"name":"BOSA","members":["alice","bob"]}`))
+	req.Header.Set("x-current-user", "admin")
+	OrganizationsCreate(w, req)
+
+	if w.Code != 200 {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	var body map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&body)
+	if body["name"] != "BOSA" {
+		t.Errorf("name = %v, want BOSA", body["name"])
+	}
+	store.Mu.RLock()
+	count := len(store.Data.Organizations)
+	store.Mu.RUnlock()
+	if count != 1 {
+		t.Errorf("org count = %d, want 1", count)
+	}
+}
+
+func TestOrganizationsCreate_MissingName(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/organizations", strings.NewReader(`{}`))
+	req.Header.Set("x-current-user", "admin")
+	OrganizationsCreate(w, req)
+
+	if w.Code != 400 {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestOrganizationsAddMember(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice"}}
+
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/organizations/org1/members", strings.NewReader(`{"member":"bob"}`))
+	OrganizationsAddMember(w, req, "org1")
+
+	if w.Code != 200 {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	store.Mu.RLock()
+	members := store.Data.Organizations["org1"].Members
+	store.Mu.RUnlock()
+	if len(members) != 2 {
+		t.Errorf("members = %d, want 2", len(members))
+	}
+}
+
+func TestOrganizationsAddMember_NotFound(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/organizations/missing/members", strings.NewReader(`{"member":"bob"}`))
+	OrganizationsAddMember(w, req, "missing")
+
+	if w.Code != 404 {
+		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestDossierOrgAccess(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice"}}
+	store.Data.Dossiers["d1"] = &store.Dossier{Title: "Org Dossier", Type: "general", Owner: "admin", OrgId: "org1"}
+
+	// FGA mock: alice can view (org member), bob cannot
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&body)
+		if strings.Contains(r.URL.Path, "list-objects") {
+			user, _ := body["user"].(string)
+			if user == "user:alice" {
+				json.NewEncoder(w).Encode(map[string]interface{}{"objects": []interface{}{"dossier:d1"}})
+			} else {
+				json.NewEncoder(w).Encode(map[string]interface{}{"objects": []interface{}{}})
+			}
+			return
+		}
+		if strings.Contains(r.URL.Path, "check") {
+			json.NewEncoder(w).Encode(map[string]interface{}{"allowed": true})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	// alice sees the dossier
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/dossiers", nil)
+	req.Header.Set("x-current-user", "alice")
+	DossiersList(w, req)
+
+	var body map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&body)
+	dossiers := body["dossiers"].([]interface{})
+	if len(dossiers) != 1 {
+		t.Errorf("alice dossiers = %d, want 1", len(dossiers))
+	}
+
+	// bob sees nothing
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest("GET", "/api/dossiers", nil)
+	req2.Header.Set("x-current-user", "bob")
+	DossiersList(w2, req2)
+
+	var body2 map[string]interface{}
+	json.NewDecoder(w2.Body).Decode(&body2)
+	dossiers2 := body2["dossiers"].([]interface{})
+	if len(dossiers2) != 0 {
+		t.Errorf("bob dossiers = %d, want 0", len(dossiers2))
+	}
+}
+
+// Scenario B: Blocked Users
+
+func TestDossierBlockedUser(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Dossiers["d1"] = &store.Dossier{Title: "Test", Type: "tax", Owner: "alice"}
+
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/d1/block", strings.NewReader(`{"targetUser":"bob"}`))
+	req.Header.Set("x-current-user", "alice")
+	DossiersBlock(w, req, "d1")
+
+	if w.Code != 200 {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	store.Mu.RLock()
+	blocked := store.Data.Dossiers["d1"].BlockedUsers
+	store.Mu.RUnlock()
+	if len(blocked) != 1 || blocked[0] != "bob" {
+		t.Errorf("blocked = %v, want [bob]", blocked)
+	}
+}
+
+func TestDossierBlockedUser_NotOwner(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Dossiers["d1"] = &store.Dossier{Title: "Test", Type: "tax", Owner: "alice"}
+
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/d1/block", strings.NewReader(`{"targetUser":"charlie"}`))
+	req.Header.Set("x-current-user", "bob")
+	DossiersBlock(w, req, "d1")
+
+	if w.Code != 403 {
+		t.Errorf("status = %d, want 403", w.Code)
+	}
+}
+
+func TestDossierUnblock(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Dossiers["d1"] = &store.Dossier{Title: "Test", Type: "tax", Owner: "alice", BlockedUsers: []string{"bob"}}
+
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/d1/unblock", strings.NewReader(`{"targetUser":"bob"}`))
+	req.Header.Set("x-current-user", "alice")
+	DossiersUnblock(w, req, "d1")
+
+	if w.Code != 200 {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	store.Mu.RLock()
+	blocked := store.Data.Dossiers["d1"].BlockedUsers
+	store.Mu.RUnlock()
+	if len(blocked) != 0 {
+		t.Errorf("blocked = %v, want []", blocked)
+	}
+}
+
+// Scenario C: Public Dossiers
+
+func TestDossierTogglePublic(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Dossiers["d1"] = &store.Dossier{Title: "Test", Type: "tax", Owner: "alice"}
+
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	// Toggle ON
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/d1/toggle-public", nil)
+	req.Header.Set("x-current-user", "alice")
+	DossiersTogglePublic(w, req, "d1")
+
+	if w.Code != 200 {
+		t.Errorf("toggle on status = %d, want 200", w.Code)
+	}
+	var body map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&body)
+	if body["isPublic"] != true {
+		t.Errorf("isPublic = %v, want true", body["isPublic"])
+	}
+
+	// Toggle OFF
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest("POST", "/api/dossiers/d1/toggle-public", nil)
+	req2.Header.Set("x-current-user", "alice")
+	DossiersTogglePublic(w2, req2, "d1")
+
+	var body2 map[string]interface{}
+	json.NewDecoder(w2.Body).Decode(&body2)
+	if body2["isPublic"] != false {
+		t.Errorf("isPublic = %v, want false", body2["isPublic"])
+	}
+}
+
+func TestDossierTogglePublic_NotOwner(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Dossiers["d1"] = &store.Dossier{Title: "Test", Type: "tax", Owner: "alice"}
+
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/d1/toggle-public", nil)
+	req.Header.Set("x-current-user", "bob")
+	DossiersTogglePublic(w, req, "d1")
+
+	if w.Code != 403 {
+		t.Errorf("status = %d, want 403", w.Code)
+	}
+}
+
+func TestPublicDossierVisibleToAll(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Dossiers["d1"] = &store.Dossier{Title: "Public Doc", Type: "general", Owner: "alice", Public: true}
+
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "list-objects") {
+			json.NewEncoder(w).Encode(map[string]interface{}{"objects": []interface{}{"dossier:d1"}})
+			return
+		}
+		if strings.Contains(r.URL.Path, "check") {
+			json.NewEncoder(w).Encode(map[string]interface{}{"allowed": false})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	// random user can see the public dossier (via list-objects returning it)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/dossiers", nil)
+	req.Header.Set("x-current-user", "random-user")
+	DossiersList(w, req)
+
+	var body map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&body)
+	dossiers := body["dossiers"].([]interface{})
+	if len(dossiers) != 1 {
+		t.Errorf("dossiers = %d, want 1", len(dossiers))
+	}
+	first := dossiers[0].(map[string]interface{})
+	if first["isPublic"] != true {
+		t.Errorf("isPublic = %v, want true", first["isPublic"])
+	}
+}
+
+// Scenario D: Contextual Tuples (Emergency Access)
+
+func TestEmergencyCheck(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Dossiers["d1"] = &store.Dossier{Title: "Test", Type: "tax", Owner: "alice"}
+
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "check") {
+			var body map[string]interface{}
+			json.NewDecoder(r.Body).Decode(&body)
+			// If contextual tuples present, allow
+			if ct, ok := body["contextual_tuples"]; ok {
+				ctMap, _ := ct.(map[string]interface{})
+				keys, _ := ctMap["tuple_keys"].([]interface{})
+				if len(keys) > 0 {
+					json.NewEncoder(w).Encode(map[string]interface{}{"allowed": true})
+					return
+				}
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{"allowed": false})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/d1/emergency-check", strings.NewReader(`{"user":"bob","relation":"viewer"}`))
+	req.Header.Set("x-current-user", "admin")
+	DossiersEmergencyCheck(w, req, "d1")
+
+	if w.Code != 200 {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	var body map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&body)
+	if body["allowed"] != true {
+		t.Errorf("allowed = %v, want true", body["allowed"])
+	}
+	if body["contextual"] != true {
+		t.Errorf("contextual = %v, want true", body["contextual"])
+	}
+}
+
+func TestEmergencyCheck_NotFound(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/missing/emergency-check", strings.NewReader(`{"user":"bob"}`))
+	DossiersEmergencyCheck(w, req, "missing")
+
+	if w.Code != 404 {
+		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestDossiersCreate_WithOrgAndPublic(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice"}}
+
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers", strings.NewReader(`{"title":"Org Doc","type":"general","orgId":"org1","public":true}`))
+	req.Header.Set("x-current-user", "alice")
+	DossiersCreate(w, req)
+
+	if w.Code != 200 {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	var body map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&body)
+	if body["orgId"] != "org1" {
+		t.Errorf("orgId = %v, want org1", body["orgId"])
+	}
+	if body["isPublic"] != true {
+		t.Errorf("isPublic = %v, want true", body["isPublic"])
+	}
+}
+
+func TestDossiersCreate_OrgNotFound(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers", strings.NewReader(`{"title":"Test","type":"general","orgId":"missing"}`))
+	req.Header.Set("x-current-user", "alice")
+	DossiersCreate(w, req)
+
+	if w.Code != 404 {
+		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestOrganizationsList(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice"}}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/dossiers/organizations", nil)
+	OrganizationsList(w, req)
+
+	if w.Code != 200 {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	var body map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&body)
+	orgs := body["organizations"].([]interface{})
+	if len(orgs) != 1 {
+		t.Errorf("orgs = %d, want 1", len(orgs))
 	}
 }
 

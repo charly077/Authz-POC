@@ -1,11 +1,19 @@
 package store
 
 type Dossier struct {
-	Title     string     `json:"title"`
-	Content   string     `json:"content"`
-	Type      string     `json:"type"`
-	Owner     string     `json:"owner"`
-	Relations []Relation `json:"relations,omitempty"`
+	Title        string     `json:"title"`
+	Content      string     `json:"content"`
+	Type         string     `json:"type"`
+	Owner        string     `json:"owner"`
+	Relations    []Relation `json:"relations,omitempty"`
+	OrgId        string     `json:"orgId,omitempty"`
+	Public       bool       `json:"public,omitempty"`
+	BlockedUsers []string   `json:"blockedUsers,omitempty"`
+}
+
+type Organization struct {
+	Name    string   `json:"name"`
+	Members []string `json:"members"`
 }
 
 type Relation struct {
@@ -21,9 +29,10 @@ type GuardianshipRequest struct {
 }
 
 type DataStore struct {
-	Dossiers             map[string]*Dossier  `json:"dossiers"`
-	GuardianshipRequests []GuardianshipRequest `json:"guardianshipRequests"`
-	Guardianships        map[string][]string   `json:"guardianships"`
+	Dossiers             map[string]*Dossier       `json:"dossiers"`
+	GuardianshipRequests []GuardianshipRequest      `json:"guardianshipRequests"`
+	Guardianships        map[string][]string        `json:"guardianships"`
+	Organizations        map[string]*Organization   `json:"organizations,omitempty"`
 }
 
 type TupleKey struct {

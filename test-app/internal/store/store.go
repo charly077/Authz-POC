@@ -14,6 +14,7 @@ var (
 		Dossiers:             make(map[string]*Dossier),
 		GuardianshipRequests: []GuardianshipRequest{},
 		Guardianships:        make(map[string][]string),
+		Organizations:        make(map[string]*Organization),
 	}
 	Mu       sync.RWMutex
 	dataFile = "/data/dossiers.json"
@@ -38,6 +39,9 @@ func Load() {
 	if Data.Guardianships == nil {
 		Data.Guardianships = make(map[string][]string)
 	}
+	if Data.Organizations == nil {
+		Data.Organizations = make(map[string]*Organization)
+	}
 }
 
 func Save() {
@@ -58,10 +62,24 @@ func RehydrateTuples(fgaWrite func(writes []TupleKey, deletes []TupleKey) error)
 		for _, rel := range dossier.Relations {
 			writes = append(writes, TupleKey{User: "user:" + rel.User, Relation: rel.Relation, Object: "dossier:" + id})
 		}
+		if dossier.OrgId != "" {
+			writes = append(writes, TupleKey{User: "organization:" + dossier.OrgId, Relation: "org_parent", Object: "dossier:" + id})
+		}
+		if dossier.Public {
+			writes = append(writes, TupleKey{User: "user:*", Relation: "public", Object: "dossier:" + id})
+		}
+		for _, blocked := range dossier.BlockedUsers {
+			writes = append(writes, TupleKey{User: "user:" + blocked, Relation: "blocked", Object: "dossier:" + id})
+		}
 	}
 	for userId, guardianList := range Data.Guardianships {
 		for _, guardianId := range guardianList {
 			writes = append(writes, TupleKey{User: "user:" + guardianId, Relation: "guardian", Object: "user:" + userId})
+		}
+	}
+	for orgId, org := range Data.Organizations {
+		for _, member := range org.Members {
+			writes = append(writes, TupleKey{User: "user:" + member, Relation: "member", Object: "organization:" + orgId})
 		}
 	}
 	for i := 0; i < len(writes); i += 10 {

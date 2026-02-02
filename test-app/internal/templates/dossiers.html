@@ -94,6 +94,19 @@
         .type-tax { background: #faf0d4; color: #9a7b2c; }
         .type-health { background: var(--sage-bg); color: var(--sage-deep); }
         .type-general { background: var(--rose-bg); color: var(--rose-deep); }
+        .badge-public { display: inline-block; padding: 0.12rem 0.5rem; border-radius: 999px; font-size: 0.65rem;
+            font-weight: 700; background: #d4e8fa; color: #2c6fb5; margin-left: 0.3rem; }
+        .badge-org { display: inline-block; padding: 0.12rem 0.5rem; border-radius: 999px; font-size: 0.65rem;
+            font-weight: 700; background: #e8d4fa; color: #7b2cb5; margin-left: 0.3rem; }
+        .badge-blocked { display: inline-block; padding: 0.12rem 0.5rem; border-radius: 999px; font-size: 0.65rem;
+            font-weight: 700; background: var(--danger-bg); color: var(--danger); margin-left: 0.3rem; }
+        .org-member { display: flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0; font-size: 0.85rem; }
+        .org-card { background: var(--bg); border-radius: 12px; padding: 0.85rem; margin-bottom: 0.5rem; }
+        .emergency-panel { background: #fff8e1; border: 1.5px solid #f0d68a; border-radius: 12px; padding: 1.25rem; margin-top: 1rem; }
+        .emergency-panel h4 { color: #9a7b2c; margin-bottom: 0.5rem; font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; }
+        .emergency-result { margin-top: 0.75rem; padding: 0.75rem; border-radius: 8px; font-weight: 600; font-size: 0.88rem; }
+        .emergency-allowed { background: var(--sage-bg); color: var(--sage-deep); }
+        .emergency-denied { background: var(--danger-bg); color: var(--danger); }
         .dossier-content { color: var(--text-muted); font-size: 0.82rem; margin-top: 0.4rem;
             overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
         .dossier-actions { margin-top: 0.75rem; display: flex; gap: 0.4rem; }
@@ -232,9 +245,10 @@
     async function render() {
         const app = document.getElementById('app');
         try {
-            const [dossiersData, guardianshipsData] = await Promise.all([
+            const [dossiersData, guardianshipsData, orgsData] = await Promise.all([
                 api('/list'),
-                api('/guardianships')
+                api('/guardianships'),
+                api('/organizations')
             ]);
 
             const allDossiers = dossiersData.dossiers || [];
@@ -245,6 +259,7 @@
             const incoming = guardianshipsData.incoming || [];
             const outgoing = guardianshipsData.outgoing || [];
 
+            const organizations = orgsData.organizations || [];
             const relatedUsers = [...new Set([...guardians, ...wards])];
 
             app.innerHTML = '' +
@@ -280,7 +295,37 @@
                 '      <option value="general">General</option>' +
                 '    </select>' +
                 '    <textarea id="dossierContent" placeholder="Content"></textarea>' +
+                '    <select id="dossierOrg"><option value="">No organization</option>' +
+                     organizations.map(function(o) { return '<option value="' + o.id + '">' + escapeHtml(o.name) + '</option>'; }).join('') +
+                '    </select>' +
+                '    <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;font-size:0.88rem;">' +
+                '      <input type="checkbox" id="dossierPublic"> Make public (visible to all users)' +
+                '    </label>' +
                 '    <button class="btn btn-primary" onclick="createDossier()">Create</button>' +
+                '  </div>' +
+                '</div>' +
+                '<div class="card">' +
+                '  <h3>Organizations</h3>' +
+                (organizations.length === 0 ? '<p class="muted">No organizations yet.</p>' :
+                    organizations.map(function(o) {
+                        return '<div class="org-card">' +
+                            '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                            '<strong>' + escapeHtml(o.name) + '</strong>' +
+                            '<span class="badge-org">ID: ' + o.id + '</span></div>' +
+                            '<h4 style="margin-top:0.5rem;">Members</h4>' +
+                            (o.members && o.members.length > 0 ? o.members.map(function(m) {
+                                return '<div class="org-member"><span>' + escapeHtml(m) + '</span>' +
+                                    '<button class="btn btn-danger btn-xs" onclick="removeOrgMember(\'' + o.id + '\',\'' + escapeHtml(m) + '\')">&times;</button></div>';
+                            }).join('') : '<p class="muted">No members</p>') +
+                            '<div style="display:flex;gap:0.35rem;margin-top:0.4rem;">' +
+                            '<input type="text" id="orgMember_' + o.id + '" placeholder="Username" style="margin-bottom:0;">' +
+                            '<button class="btn btn-primary btn-sm" onclick="addOrgMember(\'' + o.id + '\')">Add</button>' +
+                            '</div></div>';
+                    }).join('')) +
+                '  <h4 style="margin-top:1rem;">Create Organization</h4>' +
+                '  <div style="display:flex;gap:0.5rem;margin-top:0.4rem;">' +
+                '    <input type="text" id="newOrgName" placeholder="Organization name" style="margin-bottom:0;">' +
+                '    <button class="btn btn-primary btn-sm" onclick="createOrg()">Create</button>' +
                 '  </div>' +
                 '</div>' +
                 '<div class="card">' +
@@ -300,6 +345,16 @@
                 '    <tbody id="debugBody"></tbody></table>' +
                 '  </div>' +
                 '</div>' +
+                '<div class="card emergency-panel">' +
+                '  <h4>Emergency Access Check</h4>' +
+                '  <p class="muted">Simulate temporary access using contextual tuples (non-persisted, per-check only).</p>' +
+                '  <div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap;">' +
+                '    <input type="text" id="emergencyUser" placeholder="Username" style="flex:1;min-width:120px;margin-bottom:0;">' +
+                '    <input type="text" id="emergencyDossier" placeholder="Dossier ID" style="flex:1;min-width:120px;margin-bottom:0;">' +
+                '    <button class="btn btn-primary btn-sm" onclick="emergencyCheck()">Check Emergency Access</button>' +
+                '  </div>' +
+                '  <div id="emergencyResult"></div>' +
+                '</div>' +
                 '<div class="ai-explain-box">' +
                 '  <h3>AuthZ Decision Explained by AI</h3>' +
                 '  <p class="desc">Click the button below to get an AI-powered explanation of your current authorization state — why you can see certain dossiers and what relationships grant you access.</p>' +
@@ -314,11 +369,15 @@
     function renderDossierCard(dossier, relatedUsers) {
         var rels = dossier.relations || [];
         var editable = dossier.canEdit;
+        var blocked = dossier.blockedUsers || [];
         var html = '<div class="dossier-card">' +
             '<div class="dossier-card-header"><strong>' + escapeHtml(dossier.title) + '</strong>' +
             (dossier.owner !== currentUser ? '<span class="dossier-owner">(' + escapeHtml(dossier.owner) + ')</span>' : '') +
             '</div>' +
-            '<span class="type-badge type-' + escapeHtml(dossier.type) + '">' + escapeHtml(dossier.type) + '</span>';
+            '<span class="type-badge type-' + escapeHtml(dossier.type) + '">' + escapeHtml(dossier.type) + '</span>' +
+            (dossier.isPublic ? '<span class="badge-public">PUBLIC</span>' : '') +
+            (dossier.orgId ? '<span class="badge-org">ORG</span>' : '') +
+            (blocked.length > 0 ? '<span class="badge-blocked">' + blocked.length + ' blocked</span>' : '');
 
         if (dossier.content) {
             html += '<div class="dossier-content">' + escapeHtml(dossier.content) + '</div>';
@@ -328,7 +387,15 @@
             html += '<div class="dossier-actions">' +
                 '<button class="btn btn-secondary btn-sm" onclick="editDossier(\'' + dossier.id + '\',\'' + escapeHtml(dossier.title) + '\',\'' + escapeHtml(dossier.content || '') + '\',\'' + escapeHtml(dossier.type) + '\')">Edit</button>' +
                 '<button class="btn btn-danger btn-sm" onclick="deleteDossier(\'' + dossier.id + '\')">Delete</button>' +
+                (dossier.owner === currentUser ? '<button class="btn ' + (dossier.isPublic ? 'btn-danger' : 'btn-success') + ' btn-sm" onclick="togglePublic(\'' + dossier.id + '\')">' + (dossier.isPublic ? 'Make Private' : 'Make Public') + '</button>' : '') +
                 '</div>' +
+                (dossier.owner === currentUser ? '<div style="display:flex;gap:0.35rem;margin-top:0.4rem;">' +
+                    '<input type="text" id="blockUser_' + dossier.id + '" placeholder="Block user..." style="margin-bottom:0;padding:0.25rem 0.4rem;font-size:0.72rem;flex:1;">' +
+                    '<button class="btn btn-danger btn-xs" onclick="blockUser(\'' + dossier.id + '\')">Block</button></div>' +
+                    (blocked.length > 0 ? blocked.map(function(b) {
+                        return '<div class="relation-item"><span class="badge-blocked">' + escapeHtml(b) + '</span>' +
+                            '<button class="btn btn-success btn-xs" onclick="unblockUser(\'' + dossier.id + '\',\'' + escapeHtml(b) + '\')">Unblock</button></div>';
+                    }).join('') : '') : '') +
                 '<div class="dossier-relations"><h5>Relations</h5>' +
                 (rels.length > 0 ? rels.map(function(r) { return '<div class="relation-item">' +
                     '<span class="relation-badge relation-' + r.relation + '">' + r.relation.replace('_', ' ') + '</span>' +
@@ -348,9 +415,16 @@
         var title = document.getElementById('dossierTitle').value.trim();
         var content = document.getElementById('dossierContent').value.trim();
         var type = document.getElementById('dossierType').value;
+        var orgSelect = document.getElementById('dossierOrg');
+        var orgId = orgSelect ? orgSelect.value : '';
+        var publicCheck = document.getElementById('dossierPublic');
+        var isPublic = publicCheck ? publicCheck.checked : false;
         if (!title) { showToast('Title is required', 'error'); return; }
         try {
-            await api('/create', { method: 'POST', body: JSON.stringify({ title: title, content: content, type: type }) });
+            var payload = { title: title, content: content, type: type };
+            if (orgId) payload.orgId = orgId;
+            if (isPublic) payload.public = true;
+            await api('/create', { method: 'POST', body: JSON.stringify(payload) });
             showToast('Dossier created!');
             render();
         } catch (e) { showToast(e.message, 'error'); }
@@ -395,6 +469,90 @@
             showToast('Relation removed');
             render();
         } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function togglePublic(dossierId) {
+        try {
+            await api('/' + dossierId + '/toggle-public', { method: 'POST' });
+            showToast('Public status toggled!');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function blockUser(dossierId) {
+        var input = document.getElementById('blockUser_' + dossierId);
+        var targetUser = input ? input.value.trim() : '';
+        if (!targetUser) { showToast('Enter a username to block', 'error'); return; }
+        try {
+            await api('/' + dossierId + '/block', { method: 'POST', body: JSON.stringify({ targetUser: targetUser }) });
+            showToast('User blocked!');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function unblockUser(dossierId, targetUser) {
+        try {
+            await api('/' + dossierId + '/unblock', { method: 'POST', body: JSON.stringify({ targetUser: targetUser }) });
+            showToast('User unblocked');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function createOrg() {
+        var nameInput = document.getElementById('newOrgName');
+        var name = nameInput ? nameInput.value.trim() : '';
+        if (!name) { showToast('Organization name is required', 'error'); return; }
+        try {
+            await api('/organizations', { method: 'POST', body: JSON.stringify({ name: name, members: [] }) });
+            showToast('Organization created!');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function addOrgMember(orgId) {
+        var input = document.getElementById('orgMember_' + orgId);
+        var member = input ? input.value.trim() : '';
+        if (!member) return;
+        try {
+            await api('/organizations/' + orgId + '/members', { method: 'POST', body: JSON.stringify({ member: member }) });
+            showToast('Member added!');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function removeOrgMember(orgId, member) {
+        try {
+            await api('/organizations/' + orgId + '/members', { method: 'DELETE', body: JSON.stringify({ member: member }) });
+            showToast('Member removed');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function emergencyCheck() {
+        var userInput = document.getElementById('emergencyUser');
+        var dossierInput = document.getElementById('emergencyDossier');
+        var targetUser = userInput ? userInput.value.trim() : '';
+        var dossierId = dossierInput ? dossierInput.value.trim() : '';
+        if (!targetUser || !dossierId) { showToast('Both user and dossier ID are required', 'error'); return; }
+        var resultDiv = document.getElementById('emergencyResult');
+        try {
+            var data = await api('/' + dossierId + '/emergency-check', {
+                method: 'POST', body: JSON.stringify({ user: targetUser, relation: 'viewer' })
+            });
+            var statusText = data.allowed ? 'ACCESS GRANTED' : 'ACCESS DENIED';
+            var statusClass = data.allowed ? 'emergency-allowed' : 'emergency-denied';
+            resultDiv.textContent = '';
+            var div = document.createElement('div');
+            div.className = 'emergency-result ' + statusClass;
+            div.textContent = statusText + ' — ' + targetUser + ' as viewer on dossier:' + dossierId + ' (contextual tuple)';
+            resultDiv.appendChild(div);
+        } catch (e) {
+            resultDiv.textContent = '';
+            var div = document.createElement('div');
+            div.className = 'emergency-result emergency-denied';
+            div.textContent = 'Error: ' + e.message;
+            resultDiv.appendChild(div);
+        }
     }
 
     async function sendGuardianshipRequest() {
