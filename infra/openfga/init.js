@@ -145,7 +145,6 @@ async function writeAuthModel(storeId) {
                         blocked: { directly_related_user_types: [{ type: 'user' }] },
                         public: { directly_related_user_types: [{ type: 'user', wildcard: {} }] },
                         can_view: { directly_related_user_types: [{ type: 'user' }] },
-                        viewer: { directly_related_user_types: [{ type: 'user' }] },
                         editor: { directly_related_user_types: [{ type: 'user' }] }
                     }
                 }

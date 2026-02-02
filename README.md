@@ -44,8 +44,11 @@ graph LR
 | **OPA** | **PDP** (Policy Decision Point) | The "Brain". Evaluates requests against `.rego` policies (ABAC). It decides *if* access is allowed. |
 | **OpenFGA** | **ReBAC** Engine | Stores fine-grained relationships (e.g., "Alice *is viewer of* Document A"). OPA can query this for complex checks. |
 | **AI Manager** | Management UI | A custom Node.js app powered by **Google Gemini**. It allows you to chat with your policies and generate rules using natural language. |
-| **Test App** | Backend Service | A simple Go application with `/public` and `/api/protected` endpoints. It trusts Envoy to handle security. |
+| **Test App** | Backend Service | The **Citizen Mandate System** — a Go application implementing 8 ReBAC scenarios with OpenFGA (ownership, mandates, guardianship, organizations, blocking, public access, emergency access). |
 | **Postgres** | Database | Persists data for Keycloak and OpenFGA. |
+| **Loki** | Log Aggregation | Centralized log storage for all services. |
+| **Promtail** | Log Collector | Scrapes container logs and ships them to Loki. |
+| **Grafana** | Dashboards | Log exploration and monitoring with Keycloak SSO integration. |
 
 ## 🚀 Quick Start
 
@@ -55,14 +58,14 @@ graph LR
 
 ### Setup
 1.  **Configure Environment**:
-    Open `.env` and paste your Gemini API Key:
     ```bash
-    GEMINI_API_KEY=AIzaSy...
+    cp .env.example .env
+    # Edit .env — set GEMINI_API_KEY at minimum
     ```
 
 2.  **Run the Stack**:
     ```bash
-    ./run_poc.sh
+    podman compose up --build -d
     ```
 
 3.  **Keycloak** (automatic):
@@ -72,8 +75,12 @@ graph LR
 *   **Public Access**: [http://localhost:8000/public](http://localhost:8000/public)
 *   **Protected Access**: [http://localhost:8000/api/protected](http://localhost:8000/api/protected)
     *   Redirects to Keycloak. Login with `alice` / `alice`.
-*   **AI Manager**: [http://localhost:5001](http://localhost:5001)
+*   **Citizen Mandate System**: [http://localhost:8000/dossiers](http://localhost:8000/dossiers)
+    *   Manage dossiers with ReBAC: organizations, mandates, guardianships, public/blocked access.
+*   **AI Manager**: [http://localhost:8000/manager](http://localhost:8000/manager)
     *   Chat with your policies or generate new ones.
+*   **Grafana**: [http://localhost:8000/grafana](http://localhost:8000/grafana)
+    *   Log exploration and dashboards (SSO via Keycloak).
 
 ## 🖥 Running on Synology NAS
 
@@ -145,10 +152,38 @@ This project can run on a Synology NAS using Docker (Container Manager). The pro
 *   **Authenticated home**: `http://<NAS_IP>:8000/home` (redirects to Keycloak login)
 *   **AI Manager**: `http://<NAS_IP>:8000/manager`
 
+## 🔐 ReBAC Scenarios (Citizen Mandate System)
+
+The test-app implements 8 relationship-based access control patterns using OpenFGA:
+
+| # | Scenario | Pattern |
+|---|----------|---------|
+| 1 | Direct Ownership | Direct relation |
+| 2 | Mandate Delegation | Direct relation |
+| 3 | Guardian Traversal | `tupleToUserset` |
+| 4 | Guardianship Workflow | Request/Accept/Deny/Remove |
+| 5 | Organization Access | `tupleToUserset` on organization type |
+| 6 | User Blocking | `difference` (exclusion / deny-override) |
+| 7 | Public Dossiers | Wildcard `user:*` |
+| 8 | Emergency Access | Contextual tuples (non-persisted) |
+
+See [docs/REBAC-SCENARIOS.md](docs/REBAC-SCENARIOS.md) for detailed descriptions, API endpoints, tuple examples, and test references.
+
 ## 📂 Project Structure
 *   `infra/envoy/`: Envoy proxy configuration.
 *   `infra/opa/`: OPA configuration and `.rego` policies.
+*   `infra/openfga/`: OpenFGA authorization model bootstrap (`init.js`).
 *   `infra/keycloak/`: Keycloak realm config and custom login theme.
 *   `infra/postgres/`: Database initialization scripts.
+*   `infra/grafana/`: Grafana dashboards and provisioning.
+*   `infra/loki/`: Loki log aggregation config.
+*   `infra/promtail/`: Promtail log collector config.
 *   `ai-manager/`: Source code for the AI management interface.
-*   `test-app/`: Source code for the backend service.
+*   `test-app/`: Citizen Mandate System (Go) — dossier management with ReBAC.
+*   `docs/`: Project documentation.
+
+## 📖 Documentation
+
+*   [ReBAC Scenarios](docs/REBAC-SCENARIOS.md) — All 8 authorization patterns with examples
+*   [Contributing Guide](docs/CONTRIB.md) — Development workflow, env vars, testing
+*   [Operations Runbook](docs/RUNBOOK.md) — Deployment, monitoring, troubleshooting
