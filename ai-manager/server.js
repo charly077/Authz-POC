@@ -16,9 +16,14 @@ const explainAuthzSchema = z.object({
     denied: z.boolean().optional(),
     deniedPath: z.string().max(500).optional(),
     reason: z.string().max(1000).optional(),
+    visibleDossiers: z.array(z.string().max(200)).max(100).optional(),
     visibleAnimals: z.array(z.string().max(200)).max(100).optional(),
+    guardians: z.array(z.string().max(100)).max(100).optional(),
+    wards: z.array(z.string().max(100)).max(100).optional(),
     friends: z.array(z.string().max(100)).max(100).optional(),
+    myDossiersCount: z.number().int().min(0).max(10000).optional(),
     myAnimalsCount: z.number().int().min(0).max(10000).optional(),
+    sharedDossiersCount: z.number().int().min(0).max(10000).optional(),
     sharedAnimalsCount: z.number().int().min(0).max(10000).optional(),
 });
 
@@ -228,8 +233,8 @@ The policy uses PER-PATH authorization. Each path has its own "authorized if" ru
 - "/callback" → any authenticated user
 - "/api/health" → any authenticated user
 - "/api/protected" → has its own rule (see current policy)
-- "/animals" → any authenticated user
-- "/api/animals/*" → any authenticated user
+- "/dossiers" → any authenticated user
+- "/api/dossiers/*" → any authenticated user
 
 To RESTRICT a path (e.g., "only alice can access /api/protected"), you must REPLACE
 the existing rule for that path with a more restrictive one. Set "replaces" in your
@@ -324,7 +329,7 @@ If the request is better suited for OpenFGA (relationship-based, e.g., "user X i
 // ──────────────────────────────────────
 
 app.post('/api/explain-authz', validate(explainAuthzSchema), async (req, res) => {
-    const { user, denied, deniedPath, reason, visibleAnimals, friends, myAnimalsCount, sharedAnimalsCount } = req.body;
+    const { user, denied, deniedPath, reason, visibleDossiers, visibleAnimals, guardians, wards, friends, myDossiersCount, myAnimalsCount, sharedDossiersCount, sharedAnimalsCount } = req.body;
     if (!user) {
         return res.status(400).json({ error: 'user is required' });
     }
@@ -381,17 +386,19 @@ IMPORTANT: Keep the ENTIRE response under 250 words. No introductions, no conclu
         } else {
             taskPrompt = `=== SITUATION: ACCESS GRANTED ===
 - Username: ${user}
-- Visible animals: ${JSON.stringify(visibleAnimals || [])}
+- Visible dossiers: ${JSON.stringify(visibleDossiers || visibleAnimals || [])}
+- Guardians: ${JSON.stringify(guardians || [])}
+- Wards: ${JSON.stringify(wards || [])}
 - Friends: ${JSON.stringify(friends || [])}
-- My animals count: ${myAnimalsCount || 0}
-- Shared animals count: ${sharedAnimalsCount || 0}
+- My dossiers count: ${myDossiersCount || myAnimalsCount || 0}
+- Shared dossiers count: ${sharedDossiersCount || sharedAnimalsCount || 0}
 
 === YOUR TASK ===
 Explain in clear, friendly language:
 1. How OPA granted this user access (which policy rule matched)
-2. How OpenFGA determines which animals this user can see
-3. Specifically why this user sees the animals they see (trace through the tuples)
-4. What the user could do to see more animals or gain edit access
+2. How OpenFGA determines which dossiers this user can see (via ownership, guardianship, and mandates)
+3. Specifically why this user sees the dossiers they see (trace through the tuples)
+4. What the user could do to see more dossiers or gain edit access (e.g., become a guardian, receive a mandate)
 
 Keep it concise but thorough. Use markdown with headers and bullet points.
 Address the user directly ("You can see..." not "The user can see...").`;
@@ -409,8 +416,8 @@ ${opaPolicy}
 \`\`\`
 
 === LAYER 2: OpenFGA (Fine-Grained ReBAC) ===
-OpenFGA handles relationship-based access control for the Animals feature.
-It determines which animals a user can view or edit based on ownership, friendships, and relations.
+OpenFGA handles relationship-based access control for the Citizen Mandate System.
+It determines which dossiers a user can view or edit based on ownership, guardianships, and mandates.
 
 Current OpenFGA Model:
 ${fgaModel}

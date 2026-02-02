@@ -128,7 +128,6 @@ services:
         sed "s|__HMAC_SECRET__|$$ENVOY_HMAC_SECRET|g" /etc/envoy/hmac_secret.yaml.tmpl > /tmp/hmac_secret.yaml
         /usr/local/bin/envoy -c /tmp/envoy.yaml
     container_name: envoy
-    enable_ipv6: false
     env_file:
       - .env
     environment:
@@ -143,7 +142,7 @@ services:
     networks:
       - auth-net
 
-  # Protected Application (Animals demo)
+  # Protected Application (Citizen Mandate System)
   test-app:
     build:
       context: ./test-app

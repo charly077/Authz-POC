@@ -27,9 +27,9 @@ func TestRehydrateTuples_Empty(t *testing.T) {
 	defer func() { Data = origData }()
 
 	Data = &DataStore{
-		Animals:        make(map[string]*Animal),
-		FriendRequests: []FriendRequest{},
-		Friends:        make(map[string][]string),
+		Dossiers:             make(map[string]*Dossier),
+		GuardianshipRequests: []GuardianshipRequest{},
+		Guardianships:        make(map[string][]string),
 	}
 
 	called := false
@@ -48,13 +48,13 @@ func TestRehydrateTuples_WithData(t *testing.T) {
 	defer func() { Data = origData }()
 
 	Data = &DataStore{
-		Animals: map[string]*Animal{
-			"a1": {Name: "Rex", Owner: "alice", ParentId: "a0", Relations: []Relation{
-				{User: "bob", Relation: "editor"},
+		Dossiers: map[string]*Dossier{
+			"d1": {Title: "Tax Return 2024", Owner: "alice", Relations: []Relation{
+				{User: "bob", Relation: "mandate_holder"},
 			}},
 		},
-		FriendRequests: []FriendRequest{},
-		Friends: map[string][]string{
+		GuardianshipRequests: []GuardianshipRequest{},
+		Guardianships: map[string][]string{
 			"alice": {"bob"},
 		},
 	}
@@ -66,9 +66,9 @@ func TestRehydrateTuples_WithData(t *testing.T) {
 	}
 	RehydrateTuples(fgaWrite)
 
-	// Expect: owner tuple, parent tuple, editor relation, friend tuple = 4
-	if len(allWrites) != 4 {
-		t.Errorf("total writes = %d, want 4", len(allWrites))
+	// Expect: owner tuple, mandate_holder relation, guardian tuple = 3
+	if len(allWrites) != 3 {
+		t.Errorf("total writes = %d, want 3", len(allWrites))
 	}
 }
 
@@ -76,15 +76,15 @@ func TestRehydrateTuples_BatchSplitting(t *testing.T) {
 	origData := Data
 	defer func() { Data = origData }()
 
-	animals := make(map[string]*Animal)
+	dossiers := make(map[string]*Dossier)
 	for i := 0; i < 12; i++ {
 		id := RandId()
-		animals[id] = &Animal{Name: "pet", Owner: "alice"}
+		dossiers[id] = &Dossier{Title: "dossier", Owner: "alice"}
 	}
 	Data = &DataStore{
-		Animals:        animals,
-		FriendRequests: []FriendRequest{},
-		Friends:        make(map[string][]string),
+		Dossiers:             dossiers,
+		GuardianshipRequests: []GuardianshipRequest{},
+		Guardianships:        make(map[string][]string),
 	}
 
 	batchCount := 0
@@ -111,14 +111,14 @@ func TestLoadSave_Roundtrip(t *testing.T) {
 	}()
 
 	tmpDir := t.TempDir()
-	dataFile = filepath.Join(tmpDir, "data", "animals.json")
+	dataFile = filepath.Join(tmpDir, "data", "dossiers.json")
 
 	Data = &DataStore{
-		Animals: map[string]*Animal{
-			"x1": {Name: "Spot", Species: "Dog", Age: 3, Owner: "alice"},
+		Dossiers: map[string]*Dossier{
+			"x1": {Title: "Health Record", Content: "Annual checkup", Type: "health", Owner: "alice"},
 		},
-		FriendRequests: []FriendRequest{{Id: "r1", From: "alice", To: "bob", Status: "pending"}},
-		Friends:        map[string][]string{"alice": {"bob"}},
+		GuardianshipRequests: []GuardianshipRequest{{Id: "r1", From: "alice", To: "bob", Status: "pending"}},
+		Guardianships:        map[string][]string{"alice": {"bob"}},
 	}
 
 	Save()
@@ -129,23 +129,23 @@ func TestLoadSave_Roundtrip(t *testing.T) {
 	}
 
 	Data = &DataStore{
-		Animals:        make(map[string]*Animal),
-		FriendRequests: []FriendRequest{},
-		Friends:        make(map[string][]string),
+		Dossiers:             make(map[string]*Dossier),
+		GuardianshipRequests: []GuardianshipRequest{},
+		Guardianships:        make(map[string][]string),
 	}
 	Load()
 
-	if len(Data.Animals) != 1 {
-		t.Fatalf("Animals count = %d, want 1", len(Data.Animals))
+	if len(Data.Dossiers) != 1 {
+		t.Fatalf("Dossiers count = %d, want 1", len(Data.Dossiers))
 	}
-	if Data.Animals["x1"].Name != "Spot" {
-		t.Errorf("Animal name = %q, want %q", Data.Animals["x1"].Name, "Spot")
+	if Data.Dossiers["x1"].Title != "Health Record" {
+		t.Errorf("Dossier title = %q, want %q", Data.Dossiers["x1"].Title, "Health Record")
 	}
-	if len(Data.FriendRequests) != 1 {
-		t.Errorf("FriendRequests count = %d, want 1", len(Data.FriendRequests))
+	if len(Data.GuardianshipRequests) != 1 {
+		t.Errorf("GuardianshipRequests count = %d, want 1", len(Data.GuardianshipRequests))
 	}
-	if len(Data.Friends["alice"]) != 1 {
-		t.Errorf("Friends[alice] count = %d, want 1", len(Data.Friends["alice"]))
+	if len(Data.Guardianships["alice"]) != 1 {
+		t.Errorf("Guardianships[alice] count = %d, want 1", len(Data.Guardianships["alice"]))
 	}
 
 	// Verify JSON is valid

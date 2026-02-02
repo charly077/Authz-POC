@@ -41,34 +41,33 @@ func resetStore(t *testing.T) func() {
 	t.Helper()
 	origData := store.Data
 	store.Data = &store.DataStore{
-		Animals:        make(map[string]*store.Animal),
-		FriendRequests: []store.FriendRequest{},
-		Friends:        make(map[string][]string),
+		Dossiers:             make(map[string]*store.Dossier),
+		GuardianshipRequests: []store.GuardianshipRequest{},
+		Guardianships:        make(map[string][]string),
 	}
 	return func() {
 		store.Data = origData
 	}
 }
 
-func TestAnimalsList_FgaNotReady(t *testing.T) {
+func TestDossiersList_FgaNotReady(t *testing.T) {
 	origReady := config.FgaReady
 	defer func() { config.FgaReady = origReady }()
 	config.FgaReady = false
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest("GET", "/api/animals", nil)
-	AnimalsList(w, r)
+	r := httptest.NewRequest("GET", "/api/dossiers", nil)
+	DossiersList(w, r)
 
 	if w.Code != 503 {
 		t.Errorf("status = %d, want 503", w.Code)
 	}
 }
 
-func TestAnimalsList_Empty(t *testing.T) {
+func TestDossiersList_Empty(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
 
-	// Mock FGA: list-objects returns empty, check not called
 	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "list-objects") {
 			json.NewEncoder(w).Encode(map[string]interface{}{"objects": []string{}})
@@ -80,30 +79,30 @@ func TestAnimalsList_Empty(t *testing.T) {
 	defer cleanFGA()
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/animals", nil)
+	req := httptest.NewRequest("GET", "/api/dossiers", nil)
 	req.Header.Set("x-current-user", "alice")
-	AnimalsList(w, req)
+	DossiersList(w, req)
 
 	if w.Code != 200 {
 		t.Errorf("status = %d, want 200", w.Code)
 	}
 	var body map[string]interface{}
 	json.NewDecoder(w.Body).Decode(&body)
-	animals := body["animals"].([]interface{})
-	if len(animals) != 0 {
-		t.Errorf("animals count = %d, want 0", len(animals))
+	dossiers := body["dossiers"].([]interface{})
+	if len(dossiers) != 0 {
+		t.Errorf("dossiers count = %d, want 0", len(dossiers))
 	}
 }
 
-func TestAnimalsList_WithAnimals(t *testing.T) {
+func TestDossiersList_WithDossiers(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
 
-	store.Data.Animals["a1"] = &store.Animal{Name: "Rex", Species: "Dog", Age: 3, Owner: "alice"}
+	store.Data.Dossiers["d1"] = &store.Dossier{Title: "Tax Return 2024", Content: "Annual tax filing", Type: "tax", Owner: "alice"}
 
 	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "list-objects") {
-			json.NewEncoder(w).Encode(map[string]interface{}{"objects": []interface{}{"animal:a1"}})
+			json.NewEncoder(w).Encode(map[string]interface{}{"objects": []interface{}{"dossier:d1"}})
 			return
 		}
 		if strings.Contains(r.URL.Path, "check") {
@@ -116,29 +115,29 @@ func TestAnimalsList_WithAnimals(t *testing.T) {
 	defer cleanFGA()
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/animals", nil)
+	req := httptest.NewRequest("GET", "/api/dossiers", nil)
 	req.Header.Set("x-current-user", "alice")
-	AnimalsList(w, req)
+	DossiersList(w, req)
 
 	if w.Code != 200 {
 		t.Errorf("status = %d, want 200", w.Code)
 	}
 	var body map[string]interface{}
 	json.NewDecoder(w.Body).Decode(&body)
-	animals := body["animals"].([]interface{})
-	if len(animals) != 1 {
-		t.Errorf("animals count = %d, want 1", len(animals))
+	dossiers := body["dossiers"].([]interface{})
+	if len(dossiers) != 1 {
+		t.Errorf("dossiers count = %d, want 1", len(dossiers))
 	}
-	first := animals[0].(map[string]interface{})
-	if first["name"] != "Rex" {
-		t.Errorf("name = %v, want Rex", first["name"])
+	first := dossiers[0].(map[string]interface{})
+	if first["title"] != "Tax Return 2024" {
+		t.Errorf("title = %v, want Tax Return 2024", first["title"])
 	}
 	if first["canEdit"] != true {
 		t.Errorf("canEdit = %v, want true", first["canEdit"])
 	}
 }
 
-func TestAnimalsCreate_MissingName(t *testing.T) {
+func TestDossiersCreate_MissingTitle(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
 	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -147,16 +146,16 @@ func TestAnimalsCreate_MissingName(t *testing.T) {
 	defer cleanFGA()
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/api/animals", strings.NewReader(`{"species":"Dog"}`))
+	req := httptest.NewRequest("POST", "/api/dossiers", strings.NewReader(`{"type":"tax"}`))
 	req.Header.Set("x-current-user", "alice")
-	AnimalsCreate(w, req)
+	DossiersCreate(w, req)
 
 	if w.Code != 400 {
 		t.Errorf("status = %d, want 400", w.Code)
 	}
 }
 
-func TestAnimalsCreate_Valid(t *testing.T) {
+func TestDossiersCreate_InvalidType(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
 	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -165,71 +164,94 @@ func TestAnimalsCreate_Valid(t *testing.T) {
 	defer cleanFGA()
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/api/animals", strings.NewReader(`{"name":"Rex","species":"Dog","age":3}`))
+	req := httptest.NewRequest("POST", "/api/dossiers", strings.NewReader(`{"title":"Test","type":"invalid"}`))
 	req.Header.Set("x-current-user", "alice")
-	AnimalsCreate(w, req)
+	DossiersCreate(w, req)
+
+	if w.Code != 400 {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestDossiersCreate_Valid(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers", strings.NewReader(`{"title":"Tax Return 2024","content":"Annual filing","type":"tax"}`))
+	req.Header.Set("x-current-user", "alice")
+	DossiersCreate(w, req)
 
 	if w.Code != 200 {
 		t.Errorf("status = %d, want 200", w.Code)
 	}
 	var body map[string]interface{}
 	json.NewDecoder(w.Body).Decode(&body)
-	if body["name"] != "Rex" {
-		t.Errorf("name = %v, want Rex", body["name"])
+	if body["title"] != "Tax Return 2024" {
+		t.Errorf("title = %v, want Tax Return 2024", body["title"])
 	}
 	if body["owner"] != "alice" {
 		t.Errorf("owner = %v, want alice", body["owner"])
 	}
 
 	store.Mu.RLock()
-	count := len(store.Data.Animals)
+	count := len(store.Data.Dossiers)
 	store.Mu.RUnlock()
 	if count != 1 {
-		t.Errorf("store animal count = %d, want 1", count)
+		t.Errorf("store dossier count = %d, want 1", count)
 	}
 }
 
-func TestFriendsList_Empty(t *testing.T) {
+func TestGuardianshipsList_Empty(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/friends", nil)
+	req := httptest.NewRequest("GET", "/api/dossiers/guardianships", nil)
 	req.Header.Set("x-current-user", "alice")
-	FriendsList(w, req)
+	GuardianshipsList(w, req)
 
 	if w.Code != 200 {
 		t.Errorf("status = %d, want 200", w.Code)
 	}
 	var body map[string]interface{}
 	json.NewDecoder(w.Body).Decode(&body)
-	friends := body["friends"].([]interface{})
-	if len(friends) != 0 {
-		t.Errorf("friends count = %d, want 0", len(friends))
+	guardians := body["guardians"].([]interface{})
+	if len(guardians) != 0 {
+		t.Errorf("guardians count = %d, want 0", len(guardians))
+	}
+	wards := body["wards"].([]interface{})
+	if len(wards) != 0 {
+		t.Errorf("wards count = %d, want 0", len(wards))
 	}
 }
 
-func TestFriendsList_WithData(t *testing.T) {
+func TestGuardianshipsList_WithData(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
 
-	store.Data.Friends["alice"] = []string{"bob"}
-	store.Data.FriendRequests = []store.FriendRequest{
+	// bob is a guardian of alice
+	store.Data.Guardianships["alice"] = []string{"bob"}
+	store.Data.GuardianshipRequests = []store.GuardianshipRequest{
 		{Id: "r1", From: "charlie", To: "alice", Status: "pending"},
 		{Id: "r2", From: "alice", To: "dave", Status: "pending"},
 	}
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/friends", nil)
+	req := httptest.NewRequest("GET", "/api/dossiers/guardianships", nil)
 	req.Header.Set("x-current-user", "alice")
-	FriendsList(w, req)
+	GuardianshipsList(w, req)
 
 	var body map[string]interface{}
 	json.NewDecoder(w.Body).Decode(&body)
 
-	friends := body["friends"].([]interface{})
-	if len(friends) != 1 {
-		t.Errorf("friends = %d, want 1", len(friends))
+	guardians := body["guardians"].([]interface{})
+	if len(guardians) != 1 {
+		t.Errorf("guardians = %d, want 1", len(guardians))
 	}
 	incoming := body["incoming"].([]interface{})
 	if len(incoming) != 1 {
@@ -241,34 +263,34 @@ func TestFriendsList_WithData(t *testing.T) {
 	}
 }
 
-func TestFriendsRequest_ToSelf(t *testing.T) {
+func TestGuardianshipRequest_ToSelf(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/api/friends/request", strings.NewReader(`{"to":"alice"}`))
+	req := httptest.NewRequest("POST", "/api/dossiers/guardianships/request", strings.NewReader(`{"to":"alice"}`))
 	req.Header.Set("x-current-user", "alice")
-	FriendsRequest(w, req)
+	GuardianshipRequest(w, req)
 
 	if w.Code != 400 {
 		t.Errorf("status = %d, want 400", w.Code)
 	}
 }
 
-func TestFriendsRequest_Valid(t *testing.T) {
+func TestGuardianshipRequest_Valid(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/api/friends/request", strings.NewReader(`{"to":"bob"}`))
+	req := httptest.NewRequest("POST", "/api/dossiers/guardianships/request", strings.NewReader(`{"to":"bob"}`))
 	req.Header.Set("x-current-user", "alice")
-	FriendsRequest(w, req)
+	GuardianshipRequest(w, req)
 
 	if w.Code != 200 {
 		t.Errorf("status = %d, want 200", w.Code)
 	}
-	if len(store.Data.FriendRequests) != 1 {
-		t.Errorf("FriendRequests count = %d, want 1", len(store.Data.FriendRequests))
+	if len(store.Data.GuardianshipRequests) != 1 {
+		t.Errorf("GuardianshipRequests count = %d, want 1", len(store.Data.GuardianshipRequests))
 	}
 }
 
@@ -295,7 +317,7 @@ func TestDebugTuples_WithTuples(t *testing.T) {
 						"key": map[string]interface{}{
 							"user":     "user:alice",
 							"relation": "owner",
-							"object":   "animal:a1",
+							"object":   "dossier:d1",
 						},
 					},
 				},

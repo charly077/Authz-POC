@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AuthZ POC - Animals</title>
+    <title>AuthZ POC - Citizen Mandate System</title>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Nunito+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -56,18 +56,19 @@
             font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
 
         .top-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
-        .friends-list { margin-bottom: 0.75rem; }
-        .friend-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; font-weight: 500; }
-        .friend-request-form { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+        .guardianship-list { margin-bottom: 0.75rem; }
+        .guardian-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; font-weight: 500; }
+        .guardianship-request-form { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
 
-        input[type="text"], input[type="number"], select {
+        input[type="text"], input[type="number"], select, textarea {
             width: 100%; padding: 0.55rem 0.85rem; margin-bottom: 0.5rem; border-radius: 10px;
             border: 1.5px solid var(--border); background: var(--bg); color: var(--text);
             font-family: 'Nunito Sans', sans-serif; font-size: 0.9rem; }
-        input:focus, select:focus { outline: none; border-color: var(--rose); }
+        textarea { min-height: 80px; resize: vertical; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--rose); }
 
-        .friend-request-form select { flex: 1; margin-bottom: 0; }
-        .friend-request-form input { flex: 1; margin-bottom: 0; }
+        .guardianship-request-form select { flex: 1; margin-bottom: 0; }
+        .guardianship-request-form input { flex: 1; margin-bottom: 0; }
 
         .btn { padding: 0.5rem 1rem; border-radius: 999px; font-weight: 700; cursor: pointer; border: none;
             transition: all 0.2s; font-family: 'Nunito Sans', sans-serif; font-size: 0.85rem; }
@@ -81,29 +82,31 @@
         .btn-sm { padding: 0.35rem 0.8rem; font-size: 0.78rem; }
         .btn-xs { padding: 0.22rem 0.55rem; font-size: 0.72rem; line-height: 1; }
 
-        .animals-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.85rem; margin-top: 0.75rem; }
-        .animal-card { background: var(--bg); border-radius: 14px; padding: 1.1rem;
+        .dossiers-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.85rem; margin-top: 0.75rem; }
+        .dossier-card { background: var(--bg); border-radius: 14px; padding: 1.1rem;
             transition: box-shadow 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
-        .animal-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.07); }
-        .animal-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
-        .animal-card-header strong { font-family: 'Cormorant Garamond', serif; font-weight: 700; font-size: 1.1rem; }
-        .animal-owner { color: var(--text-muted); font-size: 0.78rem; }
-        .species-badge { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.72rem;
-            font-weight: 700; background: var(--rose-bg); color: var(--rose-deep); margin-right: 0.5rem; }
-        .animal-age { color: var(--text-muted); font-size: 0.82rem; }
-        .animal-actions { margin-top: 0.75rem; display: flex; gap: 0.4rem; }
-        .animal-relations { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
-        .animal-relations h5 { color: var(--text-muted);
+        .dossier-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.07); }
+        .dossier-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+        .dossier-card-header strong { font-family: 'Cormorant Garamond', serif; font-weight: 700; font-size: 1.1rem; }
+        .dossier-owner { color: var(--text-muted); font-size: 0.78rem; }
+        .type-badge { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.72rem;
+            font-weight: 700; margin-right: 0.5rem; }
+        .type-tax { background: #faf0d4; color: #9a7b2c; }
+        .type-health { background: var(--sage-bg); color: var(--sage-deep); }
+        .type-general { background: var(--rose-bg); color: var(--rose-deep); }
+        .dossier-content { color: var(--text-muted); font-size: 0.82rem; margin-top: 0.4rem;
+            overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+        .dossier-actions { margin-top: 0.75rem; display: flex; gap: 0.4rem; }
+        .dossier-relations { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+        .dossier-relations h5 { color: var(--text-muted);
             font-size: 0.72rem; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
         .relation-item { display: flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0; font-size: 0.82rem; }
         .relation-badge { display: inline-block; padding: 0.12rem 0.5rem; border-radius: 999px; font-size: 0.65rem;
             font-weight: 700; text-transform: uppercase; }
         .relation-owner { background: #faf0d4; color: #9a7b2c; }
-        .relation-editor { background: #dce8f8; color: #3b6fb5; }
-        .relation-know { background: var(--sage-bg); color: var(--sage-deep); }
-        .add-relation-form { display: flex; gap: 0.35rem; margin-top: 0.4rem; }
-        .add-relation-form select { flex: 1; margin-bottom: 0; padding: 0.25rem 0.4rem; font-size: 0.72rem; }
-        .add-relation-form select:last-of-type { width: 65px; flex: none; }
+        .relation-mandate_holder { background: #dce8f8; color: #3b6fb5; }
+        .grant-mandate-form { display: flex; gap: 0.35rem; margin-top: 0.4rem; }
+        .grant-mandate-form select { flex: 1; margin-bottom: 0; padding: 0.25rem 0.4rem; font-size: 0.72rem; }
 
         .muted { color: var(--text-muted); font-size: 0.82rem; }
 
@@ -172,7 +175,7 @@
             <a href="/home">Home</a>
             <a href="/public">Public</a>
             <a href="/api/protected">Protected</a>
-            <a href="/animals" class="active">Animals</a>
+            <a href="/dossiers" class="active">Dossiers</a>
             <a href="/api/health">Health</a>
         </div>
         <div class="nav-user">
@@ -186,8 +189,8 @@
 
     <div class="container">
         <div class="page-header">
-            <h1><em>Animals</em></h1>
-            <p>Manage your animals with OpenFGA relationship-based access control. Logged in as <strong>{{.Username}}</strong>.</p>
+            <h1><em>Citizen Mandate System</em></h1>
+            <p>Manage dossiers with OpenFGA relationship-based access control. Logged in as <strong>{{.Username}}</strong>.</p>
         </div>
 
         <div id="app">Loading...</div>
@@ -200,7 +203,7 @@
 
     <script>
     const currentUser = '{{.Username}}';
-    const apiBase = '/api/animals';
+    const apiBase = '/api/dossiers';
 
     function escapeHtml(str) {
         const div = document.createElement('div');
@@ -229,58 +232,66 @@
     async function render() {
         const app = document.getElementById('app');
         try {
-            const [animalsData, friendsData] = await Promise.all([
+            const [dossiersData, guardianshipsData] = await Promise.all([
                 api('/list'),
-                api('/friends')
+                api('/guardianships')
             ]);
 
-            const allAnimals = animalsData.animals || [];
-            const myAnimals = allAnimals.filter(a => a.owner === currentUser);
-            const sharedAnimals = allAnimals.filter(a => a.owner !== currentUser);
-            const friends = friendsData.friends || [];
-            const incoming = friendsData.incoming || [];
-            const outgoing = friendsData.outgoing || [];
+            const allDossiers = dossiersData.dossiers || [];
+            const myDossiers = allDossiers.filter(d => d.owner === currentUser);
+            const sharedDossiers = allDossiers.filter(d => d.owner !== currentUser);
+            const guardians = guardianshipsData.guardians || [];
+            const wards = guardianshipsData.wards || [];
+            const incoming = guardianshipsData.incoming || [];
+            const outgoing = guardianshipsData.outgoing || [];
 
-            // Known users: from friends, requests, and the two demo users
-            const knownUsers = [...new Set(['alice', 'bob', ...friends])].filter(u => u !== currentUser);
+            const relatedUsers = [...new Set([...guardians, ...wards])];
 
             app.innerHTML = '' +
                 '<div class="top-row">' +
                 '  <div class="card">' +
-                '    <h3>Friends</h3>' +
-                '    <div class="friends-list">' +
-                (friends.length === 0 ? '<p class="muted">No friends yet</p>' :
-                    friends.map(f => '<div class="friend-item"><span>' + escapeHtml(f) + '</span>' +
-                        '<button class="btn btn-danger btn-sm" onclick="removeFriend(\'' + escapeHtml(f) + '\')">Remove</button></div>').join('')) +
+                '    <h3>Guardianships</h3>' +
+                '    <div class="guardianship-list">' +
+                (guardians.length > 0 ? '<h4>My Guardians</h4>' +
+                    guardians.map(function(g) { return '<div class="guardian-item"><span>' + escapeHtml(g) + '</span>' +
+                        '<button class="btn btn-danger btn-sm" onclick="removeGuardianship(\'' + escapeHtml(g) + '\')">Remove</button></div>'; }).join('') : '') +
+                (wards.length > 0 ? '<h4>My Wards</h4>' +
+                    wards.map(function(w) { return '<div class="guardian-item"><span>' + escapeHtml(w) + '</span>' +
+                        '<button class="btn btn-danger btn-sm" onclick="removeGuardianship(\'' + escapeHtml(w) + '\')">Remove</button></div>'; }).join('') : '') +
+                (guardians.length === 0 && wards.length === 0 ? '<p class="muted">No guardianships yet</p>' : '') +
                 '    </div>' +
                 (incoming.length > 0 ? '<h4>Incoming Requests</h4>' +
-                    incoming.map(r => '<div class="friend-item"><span>' + escapeHtml(r.from) + '</span>' +
-                        '<button class="btn btn-success btn-sm" onclick="acceptFriend(\'' + r.id + '\')">Accept</button>' +
-                        '<button class="btn btn-danger btn-sm" onclick="denyFriend(\'' + r.id + '\')">Deny</button></div>').join('') : '') +
+                    incoming.map(function(r) { return '<div class="guardian-item"><span>' + escapeHtml(r.from) + ' wants to guard you</span>' +
+                        '<button class="btn btn-success btn-sm" onclick="acceptGuardianship(\'' + r.id + '\')">Accept</button>' +
+                        '<button class="btn btn-danger btn-sm" onclick="denyGuardianship(\'' + r.id + '\')">Deny</button></div>'; }).join('') : '') +
                 (outgoing.length > 0 ? '<h4>Outgoing Requests</h4>' +
-                    outgoing.map(r => '<div class="friend-item"><span>To: ' + escapeHtml(r.to) + '</span> <span class="muted">pending</span></div>').join('') : '') +
-                '    <div class="friend-request-form">' +
-                '      <input type="text" id="friendTarget" placeholder="Username">' +
-                '      <button class="btn btn-primary btn-sm" onclick="sendFriendRequest()">Send Request</button>' +
+                    outgoing.map(function(r) { return '<div class="guardian-item"><span>Request to guard: ' + escapeHtml(r.to) + '</span> <span class="muted">pending</span></div>'; }).join('') : '') +
+                '    <div class="guardianship-request-form">' +
+                '      <input type="text" id="guardianTarget" placeholder="Username">' +
+                '      <button class="btn btn-primary btn-sm" onclick="sendGuardianshipRequest()">Request to Guard</button>' +
                 '    </div>' +
                 '  </div>' +
                 '  <div class="card">' +
-                '    <h3>New Animal</h3>' +
-                '    <input type="text" id="animalName" placeholder="Name">' +
-                '    <input type="text" id="animalSpecies" placeholder="Species">' +
-                '    <input type="number" id="animalAge" placeholder="Age" min="0">' +
-                '    <button class="btn btn-primary" onclick="createAnimal()">Create</button>' +
+                '    <h3>New Dossier</h3>' +
+                '    <input type="text" id="dossierTitle" placeholder="Title">' +
+                '    <select id="dossierType">' +
+                '      <option value="tax">Tax</option>' +
+                '      <option value="health">Health</option>' +
+                '      <option value="general">General</option>' +
+                '    </select>' +
+                '    <textarea id="dossierContent" placeholder="Content"></textarea>' +
+                '    <button class="btn btn-primary" onclick="createDossier()">Create</button>' +
                 '  </div>' +
                 '</div>' +
                 '<div class="card">' +
-                '  <h3>My Animals</h3>' +
-                '  <div class="animals-grid">' +
-                (myAnimals.length === 0 ? '<p class="muted">No animals yet. Create one above.</p>' :
-                    myAnimals.map(a => renderAnimalCard(a, friends)).join('')) +
+                '  <h3>My Dossiers</h3>' +
+                '  <div class="dossiers-grid">' +
+                (myDossiers.length === 0 ? '<p class="muted">No dossiers yet. Create one above.</p>' :
+                    myDossiers.map(function(d) { return renderDossierCard(d, relatedUsers); }).join('')) +
                 '  </div>' +
                 '</div>' +
-                (sharedAnimals.length > 0 ? '<div class="card"><h3>Shared With Me</h3><div class="animals-grid">' +
-                    sharedAnimals.map(a => renderAnimalCard(a, friends)).join('') + '</div></div>' : '') +
+                (sharedDossiers.length > 0 ? '<div class="card"><h3>Shared With Me</h3><div class="dossiers-grid">' +
+                    sharedDossiers.map(function(d) { return renderDossierCard(d, relatedUsers); }).join('') + '</div></div>' : '') +
                 '<div class="card debug-section">' +
                 '  <h3 class="debug-toggle" onclick="toggleDebug()">Debug: OpenFGA Tuples <span id="debugArrow">&#9654;</span></h3>' +
                 '  <div id="debugContent" style="display:none;">' +
@@ -291,7 +302,7 @@
                 '</div>' +
                 '<div class="ai-explain-box">' +
                 '  <h3>AuthZ Decision Explained by AI</h3>' +
-                '  <p class="desc">Click the button below to get an AI-powered explanation of your current authorization state — why you can see certain animals and what relationships grant you access.</p>' +
+                '  <p class="desc">Click the button below to get an AI-powered explanation of your current authorization state — why you can see certain dossiers and what relationships grant you access.</p>' +
                 '  <button class="ai-explain-btn" id="aiExplainBtn" onclick="requestAIExplanation()">Explain My Authorization</button>' +
                 '  <div id="aiExplainResult"></div>' +
                 '</div>';
@@ -300,142 +311,143 @@
         }
     }
 
-    function renderAnimalCard(animal, friends) {
-        const rels = animal.relations || [];
-        const editable = animal.canEdit;
-        let html = '<div class="animal-card">' +
-            '<div class="animal-card-header"><strong>' + escapeHtml(animal.name) + '</strong>' +
-            (animal.owner !== currentUser ? '<span class="animal-owner">(' + escapeHtml(animal.owner) + ')</span>' : '') +
+    function renderDossierCard(dossier, relatedUsers) {
+        var rels = dossier.relations || [];
+        var editable = dossier.canEdit;
+        var html = '<div class="dossier-card">' +
+            '<div class="dossier-card-header"><strong>' + escapeHtml(dossier.title) + '</strong>' +
+            (dossier.owner !== currentUser ? '<span class="dossier-owner">(' + escapeHtml(dossier.owner) + ')</span>' : '') +
             '</div>' +
-            '<span class="species-badge">' + escapeHtml(animal.species) + '</span>' +
-            '<span class="animal-age">' + animal.age + ' yr' + (animal.age !== 1 ? 's' : '') + '</span>';
+            '<span class="type-badge type-' + escapeHtml(dossier.type) + '">' + escapeHtml(dossier.type) + '</span>';
+
+        if (dossier.content) {
+            html += '<div class="dossier-content">' + escapeHtml(dossier.content) + '</div>';
+        }
 
         if (editable) {
-            html += '<div class="animal-actions">' +
-                '<button class="btn btn-secondary btn-sm" onclick="editAnimal(\'' + animal.id + '\',\'' + escapeHtml(animal.name) + '\',\'' + escapeHtml(animal.species) + '\',' + animal.age + ')">Edit</button>' +
-                '<button class="btn btn-danger btn-sm" onclick="deleteAnimal(\'' + animal.id + '\')">Delete</button>' +
+            html += '<div class="dossier-actions">' +
+                '<button class="btn btn-secondary btn-sm" onclick="editDossier(\'' + dossier.id + '\',\'' + escapeHtml(dossier.title) + '\',\'' + escapeHtml(dossier.content || '') + '\',\'' + escapeHtml(dossier.type) + '\')">Edit</button>' +
+                '<button class="btn btn-danger btn-sm" onclick="deleteDossier(\'' + dossier.id + '\')">Delete</button>' +
                 '</div>' +
-                '<div class="animal-relations"><h5>Relations</h5>' +
-                (rels.length > 0 ? rels.map(r => '<div class="relation-item">' +
-                    '<span class="relation-badge relation-' + r.relation + '">' + r.relation + '</span>' +
+                '<div class="dossier-relations"><h5>Relations</h5>' +
+                (rels.length > 0 ? rels.map(function(r) { return '<div class="relation-item">' +
+                    '<span class="relation-badge relation-' + r.relation + '">' + r.relation.replace('_', ' ') + '</span>' +
                     '<span>' + escapeHtml(r.user) + '</span>' +
-                    '<button class="btn btn-danger btn-xs" onclick="removeRelation(\'' + animal.id + '\',\'' + escapeHtml(r.user) + '\',\'' + r.relation + '\')">&times;</button>' +
-                    '</div>').join('') : '<p class="muted">None</p>') +
-                (friends.length > 0 ? '<div class="add-relation-form">' +
-                    '<select id="relUser_' + animal.id + '">' + friends.map(f => '<option value="' + f + '">' + f + '</option>').join('') + '</select>' +
-                    '<select id="relType_' + animal.id + '"><option value="editor">editor</option><option value="know">know</option></select>' +
-                    '<button class="btn btn-primary btn-xs" onclick="addRelation(\'' + animal.id + '\')">+</button></div>' : '<p class="muted">Add friends to assign relations</p>') +
+                    '<button class="btn btn-danger btn-xs" onclick="removeRelation(\'' + dossier.id + '\',\'' + escapeHtml(r.user) + '\',\'' + r.relation + '\')">&times;</button>' +
+                    '</div>'; }).join('') : '<p class="muted">None</p>') +
+                (relatedUsers.length > 0 ? '<div class="grant-mandate-form">' +
+                    '<select id="relUser_' + dossier.id + '">' + relatedUsers.map(function(u) { return '<option value="' + u + '">' + u + '</option>'; }).join('') + '</select>' +
+                    '<button class="btn btn-primary btn-xs" onclick="grantMandate(\'' + dossier.id + '\')">Grant Mandate</button></div>' : '<p class="muted">Add guardianships to grant mandates</p>') +
                 '</div>';
         }
         html += '</div>';
         return html;
     }
 
-    async function createAnimal() {
-        const name = document.getElementById('animalName').value.trim();
-        const species = document.getElementById('animalSpecies').value.trim();
-        const age = parseInt(document.getElementById('animalAge').value) || 0;
-        if (!name) { showToast('Name is required', 'error'); return; }
+    async function createDossier() {
+        var title = document.getElementById('dossierTitle').value.trim();
+        var content = document.getElementById('dossierContent').value.trim();
+        var type = document.getElementById('dossierType').value;
+        if (!title) { showToast('Title is required', 'error'); return; }
         try {
-            await api('/create', { method: 'POST', body: JSON.stringify({ name, species, age }) });
-            showToast('Animal created!');
+            await api('/create', { method: 'POST', body: JSON.stringify({ title: title, content: content, type: type }) });
+            showToast('Dossier created!');
             render();
         } catch (e) { showToast(e.message, 'error'); }
     }
 
-    async function editAnimal(id, name, species, age) {
-        const newName = prompt('Name:', name);
-        if (newName === null) return;
-        const newSpecies = prompt('Species:', species);
-        if (newSpecies === null) return;
-        const newAge = prompt('Age:', age);
-        if (newAge === null) return;
+    async function editDossier(id, title, content, type) {
+        var newTitle = prompt('Title:', title);
+        if (newTitle === null) return;
+        var newContent = prompt('Content:', content);
+        if (newContent === null) return;
+        var newType = prompt('Type (tax/health/general):', type);
+        if (newType === null) return;
         try {
-            await api('/' + id, { method: 'PUT', body: JSON.stringify({ name: newName, species: newSpecies, age: parseInt(newAge) || 0 }) });
-            showToast('Animal updated!');
+            await api('/' + id, { method: 'PUT', body: JSON.stringify({ title: newTitle, content: newContent, type: newType }) });
+            showToast('Dossier updated!');
             render();
         } catch (e) { showToast(e.message, 'error'); }
     }
 
-    async function deleteAnimal(id) {
-        if (!confirm('Delete this animal?')) return;
+    async function deleteDossier(id) {
+        if (!confirm('Delete this dossier?')) return;
         try {
             await api('/' + id, { method: 'DELETE' });
-            showToast('Animal deleted');
+            showToast('Dossier deleted');
             render();
         } catch (e) { showToast(e.message, 'error'); }
     }
 
-    async function addRelation(animalId) {
-        const u = document.getElementById('relUser_' + animalId);
-        const t = document.getElementById('relType_' + animalId);
-        if (!u || !t) return;
+    async function grantMandate(dossierId) {
+        var u = document.getElementById('relUser_' + dossierId);
+        if (!u) return;
         try {
-            await api('/' + animalId + '/relations', { method: 'POST', body: JSON.stringify({ targetUser: u.value, relation: t.value }) });
-            showToast('Relation added!');
+            await api('/' + dossierId + '/relations', { method: 'POST', body: JSON.stringify({ targetUser: u.value }) });
+            showToast('Mandate granted!');
             render();
         } catch (e) { showToast(e.message, 'error'); }
     }
 
-    async function removeRelation(animalId, targetUser, relation) {
+    async function removeRelation(dossierId, targetUser, relation) {
         try {
-            await api('/' + animalId + '/relations', { method: 'DELETE', body: JSON.stringify({ targetUser, relation }) });
+            await api('/' + dossierId + '/relations', { method: 'DELETE', body: JSON.stringify({ targetUser: targetUser, relation: relation }) });
             showToast('Relation removed');
             render();
         } catch (e) { showToast(e.message, 'error'); }
     }
 
-    async function sendFriendRequest() {
-        const input = document.getElementById('friendTarget');
-        const to = input ? input.value.trim() : '';
+    async function sendGuardianshipRequest() {
+        var input = document.getElementById('guardianTarget');
+        var to = input ? input.value.trim() : '';
         if (!to) return;
         try {
-            await api('/friends/request', { method: 'POST', body: JSON.stringify({ to }) });
+            await api('/guardianships/request', { method: 'POST', body: JSON.stringify({ to: to }) });
             showToast('Request sent!');
             render();
         } catch (e) { showToast(e.message, 'error'); }
     }
 
-    async function acceptFriend(id) {
+    async function acceptGuardianship(id) {
         try {
-            await api('/friends/' + id + '/accept', { method: 'POST' });
-            showToast('Friend accepted!');
+            await api('/guardianships/' + id + '/accept', { method: 'POST' });
+            showToast('Guardianship accepted!');
             render();
         } catch (e) { showToast(e.message, 'error'); }
     }
 
-    async function denyFriend(id) {
+    async function denyGuardianship(id) {
         try {
-            await api('/friends/' + id + '/deny', { method: 'POST' });
+            await api('/guardianships/' + id + '/deny', { method: 'POST' });
             showToast('Request denied');
             render();
         } catch (e) { showToast(e.message, 'error'); }
     }
 
-    async function removeFriend(userId) {
-        if (!confirm('Remove ' + userId + ' as friend?')) return;
+    async function removeGuardianship(userId) {
+        if (!confirm('Remove guardianship with ' + userId + '?')) return;
         try {
-            await api('/friends/' + userId, { method: 'DELETE' });
-            showToast('Friend removed');
+            await api('/guardianships/' + userId, { method: 'DELETE' });
+            showToast('Guardianship removed');
             render();
         } catch (e) { showToast(e.message, 'error'); }
     }
 
     function toggleDebug() {
-        const c = document.getElementById('debugContent');
-        const a = document.getElementById('debugArrow');
+        var c = document.getElementById('debugContent');
+        var a = document.getElementById('debugArrow');
         if (c.style.display === 'none') { c.style.display = 'block'; a.innerHTML = '&#9660;'; refreshDebug(); }
         else { c.style.display = 'none'; a.innerHTML = '&#9654;'; }
     }
 
     async function refreshDebug() {
         try {
-            const data = await api('/debug/tuples');
-            const tbody = document.getElementById('debugBody');
+            var data = await api('/debug/tuples');
+            var tbody = document.getElementById('debugBody');
             if (!tbody) return;
-            const tuples = data.tuples || [];
+            var tuples = data.tuples || [];
             tbody.innerHTML = tuples.length === 0 ? '<tr><td colspan="3" class="muted">No tuples</td></tr>' :
-                tuples.map(t => '<tr><td>' + escapeHtml(t.user) + '</td><td>' + escapeHtml(t.relation) + '</td><td>' + escapeHtml(t.object) + '</td></tr>').join('');
+                tuples.map(function(t) { return '<tr><td>' + escapeHtml(t.user) + '</td><td>' + escapeHtml(t.relation) + '</td><td>' + escapeHtml(t.object) + '</td></tr>'; }).join('');
         } catch (e) { showToast('Error loading tuples', 'error'); }
     }
 
@@ -456,8 +468,8 @@
     }
 
     async function requestAIExplanation() {
-        const btn = document.getElementById('aiExplainBtn');
-        const resultDiv = document.getElementById('aiExplainResult');
+        var btn = document.getElementById('aiExplainBtn');
+        var resultDiv = document.getElementById('aiExplainResult');
         if (!btn || !resultDiv) return;
 
         btn.disabled = true;
@@ -465,29 +477,33 @@
         resultDiv.innerHTML = '';
 
         try {
-            const [animalsData, friendsData] = await Promise.all([
+            var results = await Promise.all([
                 api('/list'),
-                api('/friends')
+                api('/guardianships')
             ]);
+            var dossiersData = results[0];
+            var guardianshipsData = results[1];
 
-            const allAnimals = animalsData.animals || [];
-            const myAnimals = allAnimals.filter(a => a.owner === currentUser);
-            const sharedAnimals = allAnimals.filter(a => a.owner !== currentUser);
-            const friends = friendsData.friends || [];
+            var allDossiers = dossiersData.dossiers || [];
+            var myDossiers = allDossiers.filter(function(d) { return d.owner === currentUser; });
+            var sharedDossiers = allDossiers.filter(function(d) { return d.owner !== currentUser; });
+            var gList = guardianshipsData.guardians || [];
+            var wList = guardianshipsData.wards || [];
 
-            const res = await fetch('/manager/api/explain-authz', {
+            var res = await fetch('/manager/api/explain-authz', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     user: currentUser,
-                    visibleAnimals: allAnimals.map(a => ({ name: a.name, species: a.species, owner: a.owner, canEdit: a.canEdit })),
-                    friends: friends,
-                    myAnimalsCount: myAnimals.length,
-                    sharedAnimalsCount: sharedAnimals.length
+                    visibleDossiers: allDossiers.map(function(d) { return { title: d.title, type: d.type, owner: d.owner, canEdit: d.canEdit }; }),
+                    guardians: gList,
+                    wards: wList,
+                    myDossiersCount: myDossiers.length,
+                    sharedDossiersCount: sharedDossiers.length
                 })
             });
 
-            const data = await res.json();
+            var data = await res.json();
             if (!res.ok) throw new Error(data.error || 'AI Manager request failed');
 
             resultDiv.innerHTML = '<div class="ai-explain-result">' + simpleMarkdown(data.explanation) + '</div>';

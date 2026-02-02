@@ -198,22 +198,21 @@ authorized if {
     http_request.path == "/api/health"
 }
 
-# Protected endpoint — any authenticated user
 authorized if {
     has_valid_token
     http_request.path == "/api/protected"
 }
 
-# Animals page — any authenticated user
+# Dossiers page — any authenticated user
 authorized if {
     has_valid_token
-    http_request.path == "/animals"
+    http_request.path == "/dossiers"
 }
 
-# Animals API — any authenticated user (OpenFGA handles per-animal access)
+# Dossiers API — any authenticated user (OpenFGA handles per-dossier access)
 authorized if {
     has_valid_token
-    startswith(http_request.path, "/api/animals")
+    startswith(http_request.path, "/api/dossiers")
 }
 
 # --- Token Handling (JWKS signature verification) ---

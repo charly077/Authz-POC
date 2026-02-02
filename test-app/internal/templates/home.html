@@ -530,7 +530,7 @@
             <a href="/home"{{if eq .Path "/home"}} class="active"{{end}}>Home</a>
             <a href="/public"{{if eq .Path "/public"}} class="active"{{end}}>Public</a>
             <a href="/api/protected"{{if eq .Path "/api/protected"}} class="active"{{end}}>Protected</a>
-            <a href="/animals"{{if eq .Path "/animals"}} class="active"{{end}}>Animals</a>
+            <a href="/dossiers"{{if eq .Path "/dossiers"}} class="active"{{end}}>Dossiers</a>
             <a href="/api/health"{{if eq .Path "/api/health"}} class="active"{{end}}>Health</a>
         </div>
         <div class="nav-user">
@@ -604,10 +604,10 @@
                         <span class="endpoint-desc">Requires valid Bearer token</span>
                         <span class="endpoint-arrow">&rarr;</span>
                     </a>
-                    <a href="/animals" class="endpoint-item">
+                    <a href="/dossiers" class="endpoint-item">
                         <span class="endpoint-method">GET</span>
-                        <span class="endpoint-path">/animals</span>
-                        <span class="endpoint-desc">Animals demo with OpenFGA ReBAC</span>
+                        <span class="endpoint-path">/dossiers</span>
+                        <span class="endpoint-desc">Citizen Mandate System with OpenFGA ReBAC</span>
                         <span class="endpoint-arrow">&rarr;</span>
                     </a>
                     <a href="/api/health" class="endpoint-item">
@@ -646,7 +646,7 @@
                     <div class="model-card">
                         <div class="model-icon">&#x1F517;</div>
                         <div class="model-name">OpenFGA &mdash; Relationship-Based (ReBAC)</div>
-                        <div class="model-desc">OpenFGA stores <strong>relationships</strong> between users and resources: &ldquo;Alice is owner of Cat&rdquo;, &ldquo;Bob is friend of Alice&rdquo;. Access is derived from the relationship graph, enabling fine-grained sharing.</div>
+                        <div class="model-desc">OpenFGA stores <strong>relationships</strong> between users and resources: &ldquo;Alice is owner of Dossier&rdquo;, &ldquo;Bob is guardian of Alice&rdquo;. Access is derived from the relationship graph, enabling fine-grained sharing.</div>
                     </div>
                 </div>
                 <p>Together, OPA handles the <em>&ldquo;can this user access this endpoint?&rdquo;</em> question, while OpenFGA answers <em>&ldquo;can this user see or edit this specific resource?&rdquo;</em></p>
@@ -674,10 +674,10 @@
                     <span class="endpoint-desc">Authenticated dashboard &mdash; sign in with Keycloak</span>
                     <span class="endpoint-arrow">&rarr;</span>
                 </a>
-                <a href="/animals" class="endpoint-item">
+                <a href="/dossiers" class="endpoint-item">
                     <span class="endpoint-method">GET</span>
-                    <span class="endpoint-path">/animals</span>
-                    <span class="endpoint-desc">Animals demo &mdash; OpenFGA relationships in action</span>
+                    <span class="endpoint-path">/dossiers</span>
+                    <span class="endpoint-desc">Citizen Mandate System &mdash; OpenFGA relationships in action</span>
                     <span class="endpoint-arrow">&rarr;</span>
                 </a>
                 <a href="/api/protected" class="endpoint-item">
@@ -714,10 +714,10 @@
             <div class="prose-card">
                 <ol class="steps-list">
                     <li><strong>Sign in</strong> &mdash; Go to <a href="/home">/home</a> and log in as <code>alice</code>. You will be redirected to Keycloak, then back to the app with your identity verified.</li>
-                    <li><strong>Create animals</strong> &mdash; On the <a href="/animals">/animals</a> page, create a few animals. You are automatically the <em>owner</em> (stored as an OpenFGA relationship).</li>
-                    <li><strong>Add a friend</strong> &mdash; Send a friend request to <code>bob</code>. Then sign in as <code>bob</code> in another browser to accept it.</li>
-                    <li><strong>Share access</strong> &mdash; Back as <code>alice</code>, assign <code>bob</code> as <em>editor</em> or <em>viewer</em> on one of your animals. This writes a relationship tuple to OpenFGA.</li>
-                    <li><strong>Verify as Bob</strong> &mdash; Sign in as <code>bob</code> and check the <em>Shared With Me</em> section. Bob can now see (and possibly edit) Alice's animal &mdash; determined entirely by the OpenFGA relationship graph.</li>
+                    <li><strong>Create dossiers</strong> &mdash; On the <a href="/dossiers">/dossiers</a> page, create a few dossiers (tax, health, or general). You are automatically the <em>owner</em> (stored as an OpenFGA relationship).</li>
+                    <li><strong>Set up guardianship</strong> &mdash; Send a guardianship request to <code>bob</code>. Then sign in as <code>bob</code> in another browser to accept it. Bob becomes your guardian and can automatically see your dossiers.</li>
+                    <li><strong>Grant a mandate</strong> &mdash; Back as <code>alice</code>, grant <code>bob</code> a <em>mandate</em> on a specific dossier. This writes a <code>mandate_holder</code> relationship tuple to OpenFGA, granting both view and edit access.</li>
+                    <li><strong>Verify as Bob</strong> &mdash; Sign in as <code>bob</code> and check the <em>Shared With Me</em> section. Bob can now see (and edit) Alice's dossier &mdash; determined entirely by the OpenFGA relationship graph.</li>
                     <li><strong>Explore policies</strong> &mdash; Use the <a href="/manager" target="_blank">AI Manager</a> to inspect, modify, or generate OPA policies using natural language.</li>
                 </ol>
             </div>

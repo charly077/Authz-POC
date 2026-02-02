@@ -85,7 +85,7 @@ func TestInit(t *testing.T) {
 	if Page == nil {
 		t.Error("Page template is nil after Init")
 	}
-	if Animals == nil {
-		t.Error("Animals template is nil after Init")
+	if Dossiers == nil {
+		t.Error("Dossiers template is nil after Init")
 	}
 }

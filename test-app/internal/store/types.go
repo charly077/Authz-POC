@@ -1,11 +1,10 @@
 package store
 
-type Animal struct {
-	Name      string     `json:"name"`
-	Species   string     `json:"species"`
-	Age       int        `json:"age"`
+type Dossier struct {
+	Title     string     `json:"title"`
+	Content   string     `json:"content"`
+	Type      string     `json:"type"`
 	Owner     string     `json:"owner"`
-	ParentId  string     `json:"parentId,omitempty"`
 	Relations []Relation `json:"relations,omitempty"`
 }
 
@@ -14,7 +13,7 @@ type Relation struct {
 	Relation string `json:"relation"`
 }
 
-type FriendRequest struct {
+type GuardianshipRequest struct {
 	Id     string `json:"id"`
 	From   string `json:"from"`
 	To     string `json:"to"`
@@ -22,9 +21,9 @@ type FriendRequest struct {
 }
 
 type DataStore struct {
-	Animals        map[string]*Animal  `json:"animals"`
-	FriendRequests []FriendRequest     `json:"friendRequests"`
-	Friends        map[string][]string `json:"friends"`
+	Dossiers             map[string]*Dossier  `json:"dossiers"`
+	GuardianshipRequests []GuardianshipRequest `json:"guardianshipRequests"`
+	Guardianships        map[string][]string   `json:"guardianships"`
 }
 
 type TupleKey struct {

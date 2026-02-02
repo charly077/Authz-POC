@@ -20,18 +20,18 @@ type PageData struct {
 	StatusIcon string
 }
 
-type AnimalsPageData struct {
+type DossiersPageData struct {
 	Username string
 }
 
 var (
-	Page    *template.Template
-	Animals *template.Template
+	Page     *template.Template
+	Dossiers *template.Template
 )
 
 func Init(templateDir string) {
 	Page = template.Must(template.New("home.html").ParseFiles(templateDir + "/home.html"))
-	Animals = template.Must(template.New("animals.html").ParseFiles(templateDir + "/animals.html"))
+	Dossiers = template.Must(template.New("dossiers.html").ParseFiles(templateDir + "/dossiers.html"))
 }
 
 func BuildPageData(r *http.Request, isPublic bool) PageData {

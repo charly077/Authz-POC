@@ -82,27 +82,26 @@ async function writeAuthModel(storeId) {
             {
                 type: 'user',
                 relations: {
-                    friend: { this: {} }
+                    guardian: { this: {} }
                 },
                 metadata: {
                     relations: {
-                        friend: { directly_related_user_types: [{ type: 'user' }] }
+                        guardian: { directly_related_user_types: [{ type: 'user' }] }
                     }
                 }
             },
             {
-                type: 'animal',
+                type: 'dossier',
                 relations: {
                     owner: { this: {} },
-                    know: { this: {} },
+                    mandate_holder: { this: {} },
                     viewer: {
                         union: {
                             child: [
                                 { this: {} },
                                 { computedUserset: { relation: 'owner' } },
-                                { computedUserset: { relation: 'editor' } },
-                                { computedUserset: { relation: 'know' } },
-                                { tupleToUserset: { tupleset: { relation: 'owner' }, computedUserset: { relation: 'friend' } } }
+                                { computedUserset: { relation: 'mandate_holder' } },
+                                { tupleToUserset: { tupleset: { relation: 'owner' }, computedUserset: { relation: 'guardian' } } }
                             ]
                         }
                     },
@@ -110,19 +109,18 @@ async function writeAuthModel(storeId) {
                         union: {
                             child: [
                                 { this: {} },
-                                { computedUserset: { relation: 'owner' } }
+                                { computedUserset: { relation: 'owner' } },
+                                { computedUserset: { relation: 'mandate_holder' } }
                             ]
                         }
-                    },
-                    parent: { this: {} }
+                    }
                 },
                 metadata: {
                     relations: {
                         owner: { directly_related_user_types: [{ type: 'user' }] },
-                        know: { directly_related_user_types: [{ type: 'user' }] },
+                        mandate_holder: { directly_related_user_types: [{ type: 'user' }] },
                         viewer: { directly_related_user_types: [{ type: 'user' }] },
-                        editor: { directly_related_user_types: [{ type: 'user' }] },
-                        parent: { directly_related_user_types: [{ type: 'animal' }] }
+                        editor: { directly_related_user_types: [{ type: 'user' }] }
                     }
                 }
             }
@@ -142,7 +140,7 @@ async function main() {
 
     await waitForOpenFGA();
 
-    const storeId = await findOrCreateStore('animals-demo');
+    const storeId = await findOrCreateStore('citizen-mandate');
     const modelId = await writeAuthModel(storeId);
 
     // Write config to shared volume

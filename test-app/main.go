@@ -89,63 +89,63 @@ func main() {
 		templates.Page.Execute(w, templates.BuildPageData(r, false))
 	})
 
-	http.HandleFunc("/animals", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/dossiers", func(w http.ResponseWriter, r *http.Request) {
 		user := httputil.GetUser(r)
 		if user == "anonymous" {
 			http.Redirect(w, r, "/home", http.StatusFound)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		templates.Animals.Execute(w, templates.AnimalsPageData{Username: user})
+		templates.Dossiers.Execute(w, templates.DossiersPageData{Username: user})
 	})
 
-	http.HandleFunc("/api/animals/list", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/dossiers/list", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
-			handlers.AnimalsList(w, r)
+			handlers.DossiersList(w, r)
 		}
 	})
-	http.HandleFunc("/api/animals/create", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/dossiers/create", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
-			handlers.AnimalsCreate(w, r)
+			handlers.DossiersCreate(w, r)
 		}
 	})
-	http.HandleFunc("/api/animals/friends", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/dossiers/guardianships", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
-			handlers.FriendsList(w, r)
+			handlers.GuardianshipsList(w, r)
 		}
 	})
-	http.HandleFunc("/api/animals/friends/request", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/dossiers/guardianships/request", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
-			handlers.FriendsRequest(w, r)
+			handlers.GuardianshipRequest(w, r)
 		}
 	})
-	http.HandleFunc("/api/animals/debug/tuples", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/dossiers/debug/tuples", func(w http.ResponseWriter, r *http.Request) {
 		handlers.DebugTuples(w, r)
 	})
 
-	http.HandleFunc("/api/animals/friends/", func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/api/animals/friends/")
+	http.HandleFunc("/api/dossiers/guardianships/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/dossiers/guardianships/")
 		parts := strings.Split(path, "/")
 
 		if len(parts) == 2 && parts[1] == "accept" && r.Method == "POST" {
-			handlers.FriendsAccept(w, r, parts[0])
+			handlers.GuardianshipAccept(w, r, parts[0])
 			return
 		}
 		if len(parts) == 2 && parts[1] == "deny" && r.Method == "POST" {
-			handlers.FriendsDeny(w, r, parts[0])
+			handlers.GuardianshipDeny(w, r, parts[0])
 			return
 		}
 		if len(parts) == 1 && r.Method == "DELETE" {
-			handlers.FriendsRemove(w, r, parts[0])
+			handlers.GuardianshipRemove(w, r, parts[0])
 			return
 		}
 		httputil.JSONError(w, "Not found", 404)
 	})
 
-	http.HandleFunc("/api/animals/", func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/api/animals/")
+	http.HandleFunc("/api/dossiers/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/dossiers/")
 		if strings.HasPrefix(path, "list") || strings.HasPrefix(path, "create") ||
-			strings.HasPrefix(path, "friends") || strings.HasPrefix(path, "debug") ||
+			strings.HasPrefix(path, "guardianships") || strings.HasPrefix(path, "debug") ||
 			strings.HasPrefix(path, "status") {
 			return
 		}
@@ -155,9 +155,9 @@ func main() {
 			id := parts[0]
 			switch r.Method {
 			case "PUT":
-				handlers.AnimalsUpdate(w, r, id)
+				handlers.DossiersUpdate(w, r, id)
 			case "DELETE":
-				handlers.AnimalsDelete(w, r, id)
+				handlers.DossiersDelete(w, r, id)
 			default:
 				httputil.JSONError(w, "Method not allowed", 405)
 			}
@@ -167,11 +167,11 @@ func main() {
 			id := parts[0]
 			switch r.Method {
 			case "GET":
-				handlers.AnimalsRelationsGet(w, r, id)
+				handlers.DossiersRelationsGet(w, r, id)
 			case "POST":
-				handlers.AnimalsRelationsAdd(w, r, id)
+				handlers.DossiersRelationsAdd(w, r, id)
 			case "DELETE":
-				handlers.AnimalsRelationsDelete(w, r, id)
+				handlers.DossiersRelationsDelete(w, r, id)
 			default:
 				httputil.JSONError(w, "Method not allowed", 405)
 			}
@@ -180,7 +180,7 @@ func main() {
 		httputil.JSONError(w, "Not found", 404)
 	})
 
-	http.HandleFunc("/api/animals/status", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/dossiers/status", func(w http.ResponseWriter, r *http.Request) {
 		httputil.JSONResponse(w, map[string]interface{}{"ready": config.FgaReady, "storeId": config.FgaStoreId, "modelId": config.FgaModelId}, 200)
 	})
 

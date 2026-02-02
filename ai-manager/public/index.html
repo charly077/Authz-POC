@@ -108,7 +108,7 @@
                 <div class="fga-add-row">
                     <input type="text" id="addUser" placeholder="user:alice">
                     <input type="text" id="addRelation" placeholder="owner">
-                    <input type="text" id="addObject" placeholder="animal:abc123">
+                    <input type="text" id="addObject" placeholder="dossier:abc123">
                     <button class="primary-btn" id="addTupleBtn">Add</button>
                 </div>
             </div>
@@ -118,7 +118,7 @@
                 <div class="fga-add-row">
                     <input type="text" id="checkUser" placeholder="user:alice">
                     <input type="text" id="checkRelation" placeholder="viewer">
-                    <input type="text" id="checkObject" placeholder="animal:abc123">
+                    <input type="text" id="checkObject" placeholder="dossier:abc123">
                     <button class="primary-btn" id="checkBtn">Check</button>
                 </div>
                 <div id="checkResult" class="fga-check-result"></div>
@@ -176,7 +176,7 @@
                     <div class="arch-item arch-comparison">
                         <h4>OPA vs OpenFGA</h4>
                         <p><strong>OPA</strong> is policy-based: rules are written in Rego and evaluate request attributes (path, method, token claims). It operates at the <em>API gateway level</em> and knows nothing about individual resources.</p>
-                        <p><strong>OpenFGA</strong> is relationship-based: it stores tuples like <code>user:alice is owner of animal:cat1</code> and evaluates access by traversing the relationship graph. It operates at the <em>application level</em> for per-object decisions.</p>
+                        <p><strong>OpenFGA</strong> is relationship-based: it stores tuples like <code>user:alice is owner of dossier:d1</code> and evaluates access by traversing the relationship graph. It operates at the <em>application level</em> for per-object decisions.</p>
                         <p>Together they form a defense-in-depth pattern: OPA gates the door, OpenFGA controls what you see inside.</p>
                     </div>
                 </div>

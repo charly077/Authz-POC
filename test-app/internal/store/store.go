@@ -11,14 +11,14 @@ import (
 
 var (
 	Data = &DataStore{
-		Animals:        make(map[string]*Animal),
-		FriendRequests: []FriendRequest{},
-		Friends:        make(map[string][]string),
+		Dossiers:             make(map[string]*Dossier),
+		GuardianshipRequests: []GuardianshipRequest{},
+		Guardianships:        make(map[string][]string),
 	}
 	Mu       sync.RWMutex
-	dataFile = "/data/animals.json"
+	dataFile = "/data/dossiers.json"
 
-	AssignableRelations = []string{"owner", "editor", "know"}
+	AssignableRelations = []string{"owner", "mandate_holder"}
 )
 
 func Load() {
@@ -32,11 +32,11 @@ func Load() {
 		log.Printf("WARNING: failed to unmarshal data file: %v", err)
 		return
 	}
-	if Data.Animals == nil {
-		Data.Animals = make(map[string]*Animal)
+	if Data.Dossiers == nil {
+		Data.Dossiers = make(map[string]*Dossier)
 	}
-	if Data.Friends == nil {
-		Data.Friends = make(map[string][]string)
+	if Data.Guardianships == nil {
+		Data.Guardianships = make(map[string][]string)
 	}
 }
 
@@ -53,18 +53,15 @@ func Save() {
 // It accepts a write function to avoid importing the fga package directly.
 func RehydrateTuples(fgaWrite func(writes []TupleKey, deletes []TupleKey) error) {
 	var writes []TupleKey
-	for id, animal := range Data.Animals {
-		writes = append(writes, TupleKey{User: "user:" + animal.Owner, Relation: "owner", Object: "animal:" + id})
-		if animal.ParentId != "" {
-			writes = append(writes, TupleKey{User: "animal:" + animal.ParentId, Relation: "parent", Object: "animal:" + id})
-		}
-		for _, rel := range animal.Relations {
-			writes = append(writes, TupleKey{User: "user:" + rel.User, Relation: rel.Relation, Object: "animal:" + id})
+	for id, dossier := range Data.Dossiers {
+		writes = append(writes, TupleKey{User: "user:" + dossier.Owner, Relation: "owner", Object: "dossier:" + id})
+		for _, rel := range dossier.Relations {
+			writes = append(writes, TupleKey{User: "user:" + rel.User, Relation: rel.Relation, Object: "dossier:" + id})
 		}
 	}
-	for userId, friendList := range Data.Friends {
-		for _, friendId := range friendList {
-			writes = append(writes, TupleKey{User: "user:" + friendId, Relation: "friend", Object: "user:" + userId})
+	for userId, guardianList := range Data.Guardianships {
+		for _, guardianId := range guardianList {
+			writes = append(writes, TupleKey{User: "user:" + guardianId, Relation: "guardian", Object: "user:" + userId})
 		}
 	}
 	for i := 0; i < len(writes); i += 10 {
