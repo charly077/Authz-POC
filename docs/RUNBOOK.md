@@ -39,6 +39,8 @@ podman compose up --build -d
 
 The `-v` flag removes all volumes including the OpenFGA store. The `openfga-init` container will recreate the store with the new model on startup.
 
+**Note:** The OpenFGA model includes `admin` and `can_manage` computed relations on the `organization` type. If you modify these relations, a clean reset is required.
+
 ### Synology NAS Deployment
 
 See `README.md` for detailed Synology-specific instructions. Key differences:

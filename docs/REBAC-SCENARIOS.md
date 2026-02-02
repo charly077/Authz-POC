@@ -101,11 +101,15 @@ Guardianship is established through a multi-step workflow:
 
 A government department (organization) can share dossiers with all its members. When a dossier is assigned to an organization via `org_parent`, all organization members gain viewer access.
 
+Organizations have an **admin** role: the creator of an organization automatically becomes an admin. Only admins can add/remove members and promote/demote other admins. The `can_manage` computed relation resolves to `admin` and gates all management operations.
+
 **Model excerpt:**
 ```
 type organization
   relations
     member: [user]
+    admin: [user]
+    can_manage = admin
 
 type dossier
   relations
@@ -116,25 +120,31 @@ type dossier
 **Tuples:**
 ```
 user:alice     member      organization:bosa
+user:alice     admin       organization:bosa
 organization:bosa  org_parent  dossier:d1
 ```
 
-Result: Alice can view `dossier:d1` because she is a member of organization BOSA, which is the org_parent of the dossier.
+Result: Alice can view `dossier:d1` because she is a member of organization BOSA, which is the org_parent of the dossier. Alice can also manage members and admins because she has the `admin` relation.
 
 **API endpoints:**
-- `GET /api/dossiers/organizations` — list all organizations
-- `POST /api/dossiers/organizations` — create organization with `{ "name": "BOSA", "members": ["alice"] }`
-- `POST /api/dossiers/organizations/{id}/members` — add member with `{ "member": "bob" }`
-- `DELETE /api/dossiers/organizations/{id}/members` — remove member with `{ "member": "bob" }`
+- `GET /api/dossiers/organizations` — list all organizations (includes `admins` field)
+- `POST /api/dossiers/organizations` — create organization with `{ "name": "BOSA", "members": ["alice"] }` (creator becomes admin automatically)
+- `POST /api/dossiers/organizations/{id}/members` — add member with `{ "member": "bob" }` (admin only)
+- `DELETE /api/dossiers/organizations/{id}/members` — remove member with `{ "member": "bob" }` (admin only)
+- `POST /api/dossiers/organizations/{id}/admins` — promote member to admin with `{ "user": "bob" }` (admin only)
+- `DELETE /api/dossiers/organizations/{id}/admins` — demote admin with `{ "user": "bob" }` (admin only, user remains member)
 - `POST /api/dossiers/create` with `{ "orgId": "org1", ... }` — assign dossier to organization
 
-**Tests:** `TestOrganizationsCreate`, `TestOrganizationsAddMember`, `TestDossierOrgAccess`, `TestDossiersCreate_WithOrgAndPublic`
+**Tests:** `TestOrganizationsCreate`, `TestOrganizationsCreate_CreatorBecomesAdmin`, `TestOrganizationsAddMember_AsAdmin`, `TestOrganizationsAddMember_Unauthorized`, `TestOrganizationsRemoveMember_Unauthorized`, `TestOrganizationsAddAdmin`, `TestOrganizationsRemoveAdmin`, `TestDossierOrgAccess`, `TestDossiersCreate_WithOrgAndPublic`
 
 **Demo walkthrough:**
-1. Create organization "BOSA" with alice as member
+1. Create organization "BOSA" with alice as member (alice becomes admin)
 2. Create a dossier with `orgId` pointing to BOSA
 3. Alice can see the dossier (org member); bob cannot
-4. Add bob to BOSA -> bob can now see the dossier
+4. Alice (admin) adds bob to BOSA -> bob can now see the dossier
+5. Bob (non-admin) tries to add charlie -> 403 Forbidden
+6. Alice promotes bob to admin -> bob can now manage members
+7. Alice demotes bob -> bob loses admin but remains a member
 
 ---
 
@@ -253,7 +263,7 @@ Result: The check returns `allowed: true` for this single request. No tuple is p
 The full authorization model is defined in `infra/openfga/init.js` and includes three types:
 
 - **user** — with `guardian` relation (for guardianship traversal)
-- **organization** — with `member` relation (for org-based access)
+- **organization** — with `member`, `admin`, and `can_manage` relations (for org-based access and admin management)
 - **dossier** — with `owner`, `mandate_holder`, `org_parent`, `blocked`, `public`, `can_view`, `viewer`, `editor` relations
 
 ### Key Files

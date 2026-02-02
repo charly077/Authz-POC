@@ -130,6 +130,7 @@ Follow existing patterns:
 2. Use `resetStore(t)` to get a clean data store
 3. Both return cleanup functions — always `defer` them
 4. Test HTTP handlers by creating `httptest.NewRecorder()` and `httptest.NewRequest()`
+5. Use `fgaCheckMock(adminUser)` for handlers that require `can_manage` authorization checks — it returns an FGA mock handler that allows checks for the specified admin user and denies all others
 
 ## Service Ports
 

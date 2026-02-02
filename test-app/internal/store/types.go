@@ -14,6 +14,7 @@ type Dossier struct {
 type Organization struct {
 	Name    string   `json:"name"`
 	Members []string `json:"members"`
+	Admins  []string `json:"admins"`
 }
 
 type Relation struct {

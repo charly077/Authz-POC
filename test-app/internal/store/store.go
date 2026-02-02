@@ -81,6 +81,9 @@ func RehydrateTuples(fgaWrite func(writes []TupleKey, deletes []TupleKey) error)
 		for _, member := range org.Members {
 			writes = append(writes, TupleKey{User: "user:" + member, Relation: "member", Object: "organization:" + orgId})
 		}
+		for _, admin := range org.Admins {
+			writes = append(writes, TupleKey{User: "user:" + admin, Relation: "admin", Object: "organization:" + orgId})
+		}
 	}
 	for i := 0; i < len(writes); i += 10 {
 		end := i + 10

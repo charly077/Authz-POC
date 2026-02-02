@@ -340,6 +340,45 @@ func TestOrganizationsCreate(t *testing.T) {
 	}
 }
 
+func TestOrganizationsCreate_CreatorBecomesAdmin(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/organizations", strings.NewReader(`{"name":"BOSA","members":["alice"]}`))
+	req.Header.Set("x-current-user", "alice")
+	OrganizationsCreate(w, req)
+
+	if w.Code != 200 {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	var body map[string]interface{}
+	json.NewDecoder(w.Body).Decode(&body)
+
+	admins, ok := body["admins"].([]interface{})
+	if !ok || len(admins) != 1 {
+		t.Fatalf("admins = %v, want [alice]", body["admins"])
+	}
+	if admins[0] != "alice" {
+		t.Errorf("admins[0] = %v, want alice", admins[0])
+	}
+
+	members := body["members"].([]interface{})
+	found := false
+	for _, m := range members {
+		if m == "alice" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("creator not in members: %v", members)
+	}
+}
+
 func TestOrganizationsCreate_MissingName(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
@@ -358,18 +397,36 @@ func TestOrganizationsCreate_MissingName(t *testing.T) {
 	}
 }
 
-func TestOrganizationsAddMember(t *testing.T) {
+// fgaCheckMock returns an FGA handler that allows can_manage checks for the given admin user.
+func fgaCheckMock(adminUser string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "check") {
+			var body map[string]interface{}
+			json.NewDecoder(r.Body).Decode(&body)
+			tupleKey, _ := body["tuple_key"].(map[string]interface{})
+			user, _ := tupleKey["user"].(string)
+			if user == "user:"+adminUser {
+				json.NewEncoder(w).Encode(map[string]interface{}{"allowed": true})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]interface{}{"allowed": false})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{})
+	}
+}
+
+func TestOrganizationsAddMember_AsAdmin(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
-	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice"}}
+	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice"}, Admins: []string{"alice"}}
 
-	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{})
-	}))
+	cleanFGA := setupFGA(t, fgaCheckMock("alice"))
 	defer cleanFGA()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/dossiers/organizations/org1/members", strings.NewReader(`{"member":"bob"}`))
+	req.Header.Set("x-current-user", "alice")
 	OrganizationsAddMember(w, req, "org1")
 
 	if w.Code != 200 {
@@ -383,27 +440,116 @@ func TestOrganizationsAddMember(t *testing.T) {
 	}
 }
 
+func TestOrganizationsAddMember_Unauthorized(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice", "bob"}, Admins: []string{"alice"}}
+
+	cleanFGA := setupFGA(t, fgaCheckMock("alice"))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/organizations/org1/members", strings.NewReader(`{"member":"charlie"}`))
+	req.Header.Set("x-current-user", "bob")
+	OrganizationsAddMember(w, req, "org1")
+
+	if w.Code != 403 {
+		t.Errorf("status = %d, want 403", w.Code)
+	}
+}
+
 func TestOrganizationsAddMember_NotFound(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
-	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{})
-	}))
+	cleanFGA := setupFGA(t, fgaCheckMock("alice"))
 	defer cleanFGA()
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", "/api/dossiers/organizations/missing/members", strings.NewReader(`{"member":"bob"}`))
+	req.Header.Set("x-current-user", "alice")
 	OrganizationsAddMember(w, req, "missing")
 
+	// alice passes the can_manage check (mock allows it) but org is not found
+	// Actually the check will fail because the mock only checks user, not object existence
+	// The FGA check returns true for alice regardless, so we get 404
 	if w.Code != 404 {
 		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestOrganizationsRemoveMember_Unauthorized(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice", "bob", "charlie"}, Admins: []string{"alice"}}
+
+	cleanFGA := setupFGA(t, fgaCheckMock("alice"))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("DELETE", "/api/dossiers/organizations/org1/members", strings.NewReader(`{"member":"charlie"}`))
+	req.Header.Set("x-current-user", "bob")
+	OrganizationsRemoveMember(w, req, "org1")
+
+	if w.Code != 403 {
+		t.Errorf("status = %d, want 403", w.Code)
+	}
+}
+
+func TestOrganizationsAddAdmin(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice", "bob"}, Admins: []string{"alice"}}
+
+	cleanFGA := setupFGA(t, fgaCheckMock("alice"))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/dossiers/organizations/org1/admins", strings.NewReader(`{"user":"bob"}`))
+	req.Header.Set("x-current-user", "alice")
+	OrganizationsAddAdmin(w, req, "org1")
+
+	if w.Code != 200 {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	store.Mu.RLock()
+	admins := store.Data.Organizations["org1"].Admins
+	store.Mu.RUnlock()
+	if len(admins) != 2 {
+		t.Errorf("admins = %d, want 2", len(admins))
+	}
+}
+
+func TestOrganizationsRemoveAdmin(t *testing.T) {
+	cleanStore := resetStore(t)
+	defer cleanStore()
+	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice", "bob"}, Admins: []string{"alice", "bob"}}
+
+	cleanFGA := setupFGA(t, fgaCheckMock("alice"))
+	defer cleanFGA()
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("DELETE", "/api/dossiers/organizations/org1/admins", strings.NewReader(`{"user":"bob"}`))
+	req.Header.Set("x-current-user", "alice")
+	OrganizationsRemoveAdmin(w, req, "org1")
+
+	if w.Code != 200 {
+		t.Errorf("status = %d, want 200", w.Code)
+	}
+	store.Mu.RLock()
+	admins := store.Data.Organizations["org1"].Admins
+	store.Mu.RUnlock()
+	if len(admins) != 1 {
+		t.Errorf("admins = %d, want 1", len(admins))
+	}
+	if admins[0] != "alice" {
+		t.Errorf("remaining admin = %v, want alice", admins[0])
 	}
 }
 
 func TestDossierOrgAccess(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
-	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice"}}
+	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice"}, Admins: []string{"alice"}}
 	store.Data.Dossiers["d1"] = &store.Dossier{Title: "Org Dossier", Type: "general", Owner: "admin", OrgId: "org1"}
 
 	// FGA mock: alice can view (org member), bob cannot
@@ -689,7 +835,7 @@ func TestEmergencyCheck_NotFound(t *testing.T) {
 func TestDossiersCreate_WithOrgAndPublic(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
-	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice"}}
+	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice"}, Admins: []string{"alice"}}
 
 	cleanFGA := setupFGA(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{})
@@ -735,7 +881,7 @@ func TestDossiersCreate_OrgNotFound(t *testing.T) {
 func TestOrganizationsList(t *testing.T) {
 	cleanStore := resetStore(t)
 	defer cleanStore()
-	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice"}}
+	store.Data.Organizations["org1"] = &store.Organization{Name: "BOSA", Members: []string{"alice"}, Admins: []string{"alice"}}
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/dossiers/organizations", nil)

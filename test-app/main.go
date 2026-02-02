@@ -143,6 +143,17 @@ func main() {
 			}
 			return
 		}
+		if len(parts) == 2 && parts[1] == "admins" {
+			switch r.Method {
+			case "POST":
+				handlers.OrganizationsAddAdmin(w, r, parts[0])
+			case "DELETE":
+				handlers.OrganizationsRemoveAdmin(w, r, parts[0])
+			default:
+				httputil.JSONError(w, "Method not allowed", 405)
+			}
+			return
+		}
 		httputil.JSONError(w, "Not found", 404)
 	})
 	http.HandleFunc("/api/dossiers/debug/tuples", func(w http.ResponseWriter, r *http.Request) {

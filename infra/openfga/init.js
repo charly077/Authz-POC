@@ -93,11 +93,16 @@ async function writeAuthModel(storeId) {
             {
                 type: 'organization',
                 relations: {
-                    member: { this: {} }
+                    member: { this: {} },
+                    admin: { this: {} },
+                    can_manage: {
+                        computedUserset: { relation: 'admin' }
+                    }
                 },
                 metadata: {
                     relations: {
-                        member: { directly_related_user_types: [{ type: 'user' }] }
+                        member: { directly_related_user_types: [{ type: 'user' }] },
+                        admin: { directly_related_user_types: [{ type: 'user' }] }
                     }
                 }
             },
