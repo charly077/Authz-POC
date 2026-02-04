@@ -1138,6 +1138,178 @@ app.delete('/api/organizations/:id', async (req, res) => {
     }
 });
 
+// ──────────────────────────────────────
+// Users proxy (to test-app)
+// ──────────────────────────────────────
+
+app.get('/api/users', async (req, res) => {
+    try {
+        const result = await axios.get(`${TEST_APP_URL}/api/dossiers/admin/users`, {
+            headers: MANAGER_ADMIN_HEADERS
+        });
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
+// ──────────────────────────────────────
+// Guardianships proxy (to test-app)
+// ──────────────────────────────────────
+
+app.get('/api/guardianships', async (req, res) => {
+    try {
+        const result = await axios.get(`${TEST_APP_URL}/api/dossiers/admin/guardianships`, {
+            headers: MANAGER_ADMIN_HEADERS
+        });
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
+// ──────────────────────────────────────
+// Dossiers proxy (to test-app)
+// ──────────────────────────────────────
+
+// Rate limiter for dossier management (30 req per minute per IP)
+const dossierLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many dossier requests, please try again later' },
+});
+app.use('/api/dossiers', dossierLimiter);
+
+app.get('/api/dossiers', async (req, res) => {
+    try {
+        const result = await axios.get(`${TEST_APP_URL}/api/dossiers/admin/list`, {
+            headers: MANAGER_ADMIN_HEADERS
+        });
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
+app.put('/api/dossiers/:id', async (req, res) => {
+    const { id } = req.params;
+    const user = req.session?.user?.username;
+    try {
+        const result = await axios.put(
+            `${TEST_APP_URL}/api/dossiers/${encodeURIComponent(id)}`,
+            req.body,
+            { headers: { 'x-current-user': user, ...MANAGER_ADMIN_HEADERS } }
+        );
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
+app.delete('/api/dossiers/:id', async (req, res) => {
+    const { id } = req.params;
+    const user = req.session?.user?.username;
+    try {
+        const result = await axios.delete(
+            `${TEST_APP_URL}/api/dossiers/${encodeURIComponent(id)}`,
+            { headers: { 'x-current-user': user, ...MANAGER_ADMIN_HEADERS } }
+        );
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
+app.post('/api/dossiers/:id/toggle-public', async (req, res) => {
+    const { id } = req.params;
+    const user = req.session?.user?.username;
+    try {
+        const result = await axios.post(
+            `${TEST_APP_URL}/api/dossiers/${encodeURIComponent(id)}/toggle-public`,
+            req.body,
+            { headers: { 'x-current-user': user, ...MANAGER_ADMIN_HEADERS } }
+        );
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
+app.post('/api/dossiers/:id/block', async (req, res) => {
+    const { id } = req.params;
+    const user = req.session?.user?.username;
+    try {
+        const result = await axios.post(
+            `${TEST_APP_URL}/api/dossiers/${encodeURIComponent(id)}/block`,
+            req.body,
+            { headers: { 'x-current-user': user, ...MANAGER_ADMIN_HEADERS } }
+        );
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
+app.post('/api/dossiers/:id/unblock', async (req, res) => {
+    const { id } = req.params;
+    const user = req.session?.user?.username;
+    try {
+        const result = await axios.post(
+            `${TEST_APP_URL}/api/dossiers/${encodeURIComponent(id)}/unblock`,
+            req.body,
+            { headers: { 'x-current-user': user, ...MANAGER_ADMIN_HEADERS } }
+        );
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
+app.get('/api/dossiers/:id/relations', async (req, res) => {
+    const { id } = req.params;
+    const user = req.session?.user?.username;
+    try {
+        const result = await axios.get(
+            `${TEST_APP_URL}/api/dossiers/${encodeURIComponent(id)}/relations`,
+            { headers: { 'x-current-user': user, ...MANAGER_ADMIN_HEADERS } }
+        );
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
+app.post('/api/dossiers/:id/relations', async (req, res) => {
+    const { id } = req.params;
+    const user = req.session?.user?.username;
+    try {
+        const result = await axios.post(
+            `${TEST_APP_URL}/api/dossiers/${encodeURIComponent(id)}/relations`,
+            req.body,
+            { headers: { 'x-current-user': user, ...MANAGER_ADMIN_HEADERS } }
+        );
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
+app.delete('/api/dossiers/:id/relations', async (req, res) => {
+    const { id } = req.params;
+    const user = req.session?.user?.username;
+    try {
+        const result = await axios.delete(
+            `${TEST_APP_URL}/api/dossiers/${encodeURIComponent(id)}/relations`,
+            { data: req.body, headers: { 'x-current-user': user, ...MANAGER_ADMIN_HEADERS } }
+        );
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
 // Push the current policy to OPA on startup
 async function pushPolicyToOPA() {
     const policy = readCurrentPolicy();

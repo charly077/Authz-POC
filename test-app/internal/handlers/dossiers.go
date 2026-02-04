@@ -12,6 +12,126 @@ import (
 
 var validDossierTypes = []string{"tax", "health", "general"}
 
+// isManagerAdminDossiers checks if the request comes from the AI Manager with admin privileges
+func isManagerAdminDossiers(r *http.Request) bool {
+	return r.Header.Get("x-manager-admin") == "true"
+}
+
+// UsersList returns all known users in the system (for admin use)
+func UsersList(w http.ResponseWriter, r *http.Request) {
+	if !isManagerAdminDossiers(r) {
+		httputil.JSONError(w, "Admin access required", 403)
+		return
+	}
+
+	// Collect users from all sources
+	userSet := make(map[string]bool)
+
+	store.Mu.RLock()
+	// From dossiers (owners and relations)
+	for _, d := range store.Data.Dossiers {
+		userSet[d.Owner] = true
+		for _, rel := range d.Relations {
+			userSet[rel.User] = true
+		}
+		for _, blocked := range d.BlockedUsers {
+			userSet[blocked] = true
+		}
+	}
+	// From guardianships
+	for userId, guardians := range store.Data.Guardianships {
+		userSet[userId] = true
+		for _, g := range guardians {
+			userSet[g] = true
+		}
+	}
+	// From guardianship requests
+	for _, req := range store.Data.GuardianshipRequests {
+		userSet[req.From] = true
+		userSet[req.To] = true
+	}
+	// From organizations
+	for _, org := range store.Data.Organizations {
+		for _, m := range org.Members {
+			userSet[m] = true
+		}
+		for _, a := range org.Admins {
+			userSet[a] = true
+		}
+	}
+	store.Mu.RUnlock()
+
+	var users []string
+	for u := range userSet {
+		users = append(users, u)
+	}
+
+	httputil.JSONResponse(w, map[string]interface{}{"users": users}, 200)
+}
+
+// GuardianshipsListAll returns all guardianships in the system (for admin use)
+func GuardianshipsListAll(w http.ResponseWriter, r *http.Request) {
+	if !isManagerAdminDossiers(r) {
+		httputil.JSONError(w, "Admin access required", 403)
+		return
+	}
+
+	type guardianshipResp struct {
+		User      string   `json:"user"`
+		Guardians []string `json:"guardians"`
+	}
+
+	store.Mu.RLock()
+	var guardianships []guardianshipResp
+	for userId, guardians := range store.Data.Guardianships {
+		guardianships = append(guardianships, guardianshipResp{
+			User:      userId,
+			Guardians: guardians,
+		})
+	}
+	store.Mu.RUnlock()
+
+	if guardianships == nil {
+		guardianships = []guardianshipResp{}
+	}
+	httputil.JSONResponse(w, map[string]interface{}{"guardianships": guardianships}, 200)
+}
+
+// DossiersListAll returns all dossiers (for admin use)
+func DossiersListAll(w http.ResponseWriter, r *http.Request) {
+	if !isManagerAdminDossiers(r) {
+		httputil.JSONError(w, "Admin access required", 403)
+		return
+	}
+
+	type dossierResp struct {
+		Id           string           `json:"id"`
+		Title        string           `json:"title"`
+		Content      string           `json:"content"`
+		Type         string           `json:"type"`
+		Owner        string           `json:"owner"`
+		Relations    []store.Relation `json:"relations,omitempty"`
+		IsPublic     bool             `json:"isPublic"`
+		BlockedUsers []string         `json:"blockedUsers,omitempty"`
+		OrgId        string           `json:"orgId,omitempty"`
+	}
+
+	store.Mu.RLock()
+	var dossiers []dossierResp
+	for id, d := range store.Data.Dossiers {
+		dossiers = append(dossiers, dossierResp{
+			Id: id, Title: d.Title, Content: d.Content, Type: d.Type,
+			Owner: d.Owner, Relations: d.Relations,
+			IsPublic: d.Public, BlockedUsers: d.BlockedUsers, OrgId: d.OrgId,
+		})
+	}
+	store.Mu.RUnlock()
+	if dossiers == nil {
+		dossiers = []dossierResp{}
+	}
+	httputil.JSONResponse(w, map[string]interface{}{"dossiers": dossiers}, 200)
+}
+
 func DossiersList(w http.ResponseWriter, r *http.Request) {
 	if !config.FgaReady {
 		httputil.JSONError(w, "OpenFGA not ready", 503)
@@ -129,7 +249,7 @@ func DossiersUpdate(w http.ResponseWriter, r *http.Request, id string) {
 		httputil.JSONError(w, "Dossier not found", 404)
 		return
 	}
-	if !fga.Check("user:"+user, "editor", "dossier:"+id) {
+	if !isManagerAdminDossiers(r) && !fga.Check("user:"+user, "editor", "dossier:"+id) {
 		httputil.JSONError(w, "Not authorized to edit this dossier", 403)
 		return
 	}
@@ -166,7 +286,7 @@ func DossiersDelete(w http.ResponseWriter, r *http.Request, id string) {
 		httputil.JSONError(w, "Dossier not found", 404)
 		return
 	}
-	if !fga.Check("user:"+user, "editor", "dossier:"+id) {
+	if !isManagerAdminDossiers(r) && !fga.Check("user:"+user, "editor", "dossier:"+id) {
 		httputil.JSONError(w, "Not authorized to delete this dossier", 403)
 		return
 	}
@@ -202,7 +322,7 @@ func DossiersRelationsGet(w http.ResponseWriter, r *http.Request, id string) {
 		httputil.JSONError(w, "Dossier not found", 404)
 		return
 	}
-	if !fga.Check("user:"+user, "editor", "dossier:"+id) {
+	if !isManagerAdminDossiers(r) && !fga.Check("user:"+user, "editor", "dossier:"+id) {
 		httputil.JSONError(w, "Not authorized", 403)
 		return
 	}
@@ -234,16 +354,19 @@ func DossiersRelationsAdd(w http.ResponseWriter, r *http.Request, id string) {
 		httputil.JSONError(w, "targetUser is required", 400)
 		return
 	}
-	if !fga.Check("user:"+user, "editor", "dossier:"+id) {
+	if !isManagerAdminDossiers(r) && !fga.Check("user:"+user, "editor", "dossier:"+id) {
 		httputil.JSONError(w, "Not authorized to manage relations on this dossier", 403)
 		return
 	}
-	// Check guardianship: targetUser must be a guardian of user OR user must be a guardian of targetUser
-	userGuardians := store.Data.Guardianships[user]
-	targetGuardians := store.Data.Guardianships[targetUser]
-	if !httputil.Contains(userGuardians, targetUser) && !httputil.Contains(targetGuardians, user) {
-		httputil.JSONError(w, targetUser+" is not in a guardianship with you. You can only grant mandates to guardians or wards.", 400)
-		return
+	// Admin can add any relation without guardianship check; regular users need guardianship
+	if !isManagerAdminDossiers(r) {
+		// Check guardianship: targetUser must be a guardian of user OR user must be a guardian of targetUser
+		userGuardians := store.Data.Guardianships[user]
+		targetGuardians := store.Data.Guardianships[targetUser]
+		if !httputil.Contains(userGuardians, targetUser) && !httputil.Contains(targetGuardians, user) {
+			httputil.JSONError(w, targetUser+" is not in a guardianship with you. You can only grant mandates to guardians or wards.", 400)
+			return
+		}
 	}
 	relation := "mandate_holder"
 	for _, rel := range dossier.Relations {
@@ -284,7 +407,7 @@ func DossiersRelationsDelete(w http.ResponseWriter, r *http.Request, id string) 
 		httputil.JSONError(w, "targetUser and relation are required", 400)
 		return
 	}
-	if !fga.Check("user:"+user, "editor", "dossier:"+id) {
+	if !isManagerAdminDossiers(r) && !fga.Check("user:"+user, "editor", "dossier:"+id) {
 		httputil.JSONError(w, "Not authorized", 403)
 		return
 	}
@@ -313,7 +436,7 @@ func DossiersTogglePublic(w http.ResponseWriter, r *http.Request, id string) {
 		httputil.JSONError(w, "Dossier not found", 404)
 		return
 	}
-	if dossier.Owner != user {
+	if !isManagerAdminDossiers(r) && dossier.Owner != user {
 		store.Mu.Unlock()
 		httputil.JSONError(w, "Only the owner can toggle public status", 403)
 		return
@@ -365,7 +488,7 @@ func DossiersBlock(w http.ResponseWriter, r *http.Request, id string) {
 		httputil.JSONError(w, "Dossier not found", 404)
 		return
 	}
-	if dossier.Owner != user {
+	if !isManagerAdminDossiers(r) && dossier.Owner != user {
 		store.Mu.Unlock()
 		httputil.JSONError(w, "Only the owner can block users", 403)
 		return
@@ -416,7 +539,7 @@ func DossiersUnblock(w http.ResponseWriter, r *http.Request, id string) {
 		httputil.JSONError(w, "Dossier not found", 404)
 		return
 	}
-	if dossier.Owner != user {
+	if !isManagerAdminDossiers(r) && dossier.Owner != user {
 		store.Mu.Unlock()
 		httputil.JSONError(w, "Only the owner can unblock users", 403)
 		return

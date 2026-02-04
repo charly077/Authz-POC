@@ -55,6 +55,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                 loadTuples();
                 loadModel();
                 loadOrganizations();
+                loadDossiers();
+                loadUsersAndGuardianships();
                 break;
             case 'visualize':
                 renderAllViz();
@@ -347,6 +349,296 @@ async function deleteOrganization(orgId, orgName) {
 }
 
 document.getElementById('refreshOrgsBtn')?.addEventListener('click', loadOrganizations);
+
+// ──────────────────────────────────────
+// Dossiers Management
+// ──────────────────────────────────────
+
+async function loadDossiers() {
+    const container = document.getElementById('dossiersContainer');
+    if (!container) return;
+    try {
+        const res = await fetch('api/dossiers');
+        const data = await res.json();
+        const dossiers = data.dossiers || [];
+
+        if (dossiers.length === 0) {
+            container.innerHTML = '<p class="muted">No dossiers yet.</p>';
+            return;
+        }
+
+        container.innerHTML = dossiers.map(d => {
+            const safeId = escapeHtml(d.id);
+            const safeTitle = escapeHtml(d.title);
+            const safeOwner = escapeHtml(d.owner);
+            const safeType = escapeHtml(d.type);
+            const safeContent = escapeHtml(d.content || '').substring(0, 100);
+            return `
+                <div class="dossier-card">
+                    <div class="dossier-header">
+                        <div>
+                            <strong>${safeTitle}</strong>
+                            <span class="type-badge ${safeType}">${safeType}</span>
+                            ${d.isPublic ? '<span class="public-badge">public</span>' : ''}
+                        </div>
+                        <div class="dossier-header-actions">
+                            <code>${safeId}</code>
+                            <button class="secondary-btn small-btn" onclick="toggleDossierPublic('${escapeAttr(d.id)}')">${d.isPublic ? 'Make Private' : 'Make Public'}</button>
+                            <button class="danger-btn small-btn" onclick="deleteDossier('${escapeAttr(d.id)}', '${escapeAttr(d.title)}')">Delete</button>
+                        </div>
+                    </div>
+                    <div class="dossier-details">
+                        <p><strong>Owner:</strong> ${safeOwner}</p>
+                        ${d.orgId ? `<p><strong>Organization:</strong> ${escapeHtml(d.orgId)}</p>` : ''}
+                        ${safeContent ? `<p class="dossier-content">${safeContent}${d.content && d.content.length > 100 ? '...' : ''}</p>` : ''}
+                    </div>
+                    ${d.relations && d.relations.length > 0 ? `
+                        <div class="dossier-section">
+                            <h5>Relations</h5>
+                            <div class="relation-chips">
+                                ${d.relations.map(rel => `
+                                    <span class="relation-chip">
+                                        ${escapeHtml(rel.user)} (${escapeHtml(rel.relation)})
+                                        <button class="chip-remove" onclick="removeDossierRelation('${escapeAttr(d.id)}', '${escapeAttr(rel.user)}', '${escapeAttr(rel.relation)}')">&times;</button>
+                                    </span>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    ${d.blockedUsers && d.blockedUsers.length > 0 ? `
+                        <div class="dossier-section">
+                            <h5>Blocked Users</h5>
+                            <div class="blocked-chips">
+                                ${d.blockedUsers.map(u => `
+                                    <span class="blocked-chip">
+                                        ${escapeHtml(u)}
+                                        <button class="chip-remove" onclick="unblockDossierUser('${escapeAttr(d.id)}', '${escapeAttr(u)}')">&times;</button>
+                                    </span>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    <div class="dossier-actions">
+                        <div class="dossier-add-row">
+                            <input type="text" id="addRelation_${safeId}" placeholder="Username">
+                            <button class="primary-btn small-btn" onclick="addDossierRelation('${escapeAttr(d.id)}')">Add Mandate</button>
+                            <button class="secondary-btn small-btn" onclick="blockDossierUser('${escapeAttr(d.id)}')">Block User</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        container.innerHTML = `<p class="muted">Error loading dossiers: ${escapeHtml(e.message)}</p>`;
+    }
+}
+
+async function toggleDossierPublic(dossierId) {
+    try {
+        const res = await fetch(`api/dossiers/${encodeURIComponent(dossierId)}/toggle-public`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast(data.isPublic ? 'Dossier is now public' : 'Dossier is now private');
+            loadDossiers();
+            loadTuples();
+        } else {
+            showToast(data.error || 'Failed to toggle public status', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function deleteDossier(dossierId, title) {
+    if (!confirm(`Delete dossier "${title}"? This action cannot be undone.`)) return;
+    try {
+        const res = await fetch(`api/dossiers/${encodeURIComponent(dossierId)}`, {
+            method: 'DELETE'
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('Dossier deleted');
+            loadDossiers();
+            loadTuples();
+        } else {
+            showToast(data.error || 'Failed to delete dossier', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function addDossierRelation(dossierId) {
+    const input = document.getElementById('addRelation_' + dossierId);
+    const targetUser = input ? input.value.trim() : '';
+    if (!targetUser) {
+        showToast('Username is required', 'error');
+        return;
+    }
+    try {
+        const res = await fetch(`api/dossiers/${encodeURIComponent(dossierId)}/relations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetUser })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('Mandate added!');
+            input.value = '';
+            loadDossiers();
+            loadTuples();
+        } else {
+            showToast(data.error || 'Failed to add mandate', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function removeDossierRelation(dossierId, targetUser, relation) {
+    if (!confirm(`Remove ${relation} for ${targetUser}?`)) return;
+    try {
+        const res = await fetch(`api/dossiers/${encodeURIComponent(dossierId)}/relations`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetUser, relation })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('Relation removed');
+            loadDossiers();
+            loadTuples();
+        } else {
+            showToast(data.error || 'Failed to remove relation', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function blockDossierUser(dossierId) {
+    const input = document.getElementById('addRelation_' + dossierId);
+    const targetUser = input ? input.value.trim() : '';
+    if (!targetUser) {
+        showToast('Username is required', 'error');
+        return;
+    }
+    try {
+        const res = await fetch(`api/dossiers/${encodeURIComponent(dossierId)}/block`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetUser })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('User blocked');
+            input.value = '';
+            loadDossiers();
+            loadTuples();
+        } else {
+            showToast(data.error || 'Failed to block user', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function unblockDossierUser(dossierId, targetUser) {
+    if (!confirm(`Unblock ${targetUser}?`)) return;
+    try {
+        const res = await fetch(`api/dossiers/${encodeURIComponent(dossierId)}/unblock`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetUser })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('User unblocked');
+            loadDossiers();
+            loadTuples();
+        } else {
+            showToast(data.error || 'Failed to unblock user', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+document.getElementById('refreshDossiersBtn')?.addEventListener('click', loadDossiers);
+
+// ──────────────────────────────────────
+// Users & Guardianships Management
+// ──────────────────────────────────────
+
+async function loadUsersAndGuardianships() {
+    const container = document.getElementById('usersContainer');
+    if (!container) return;
+    try {
+        const [usersRes, guardiansRes] = await Promise.all([
+            fetch('api/users'),
+            fetch('api/guardianships')
+        ]);
+        const usersData = await usersRes.json();
+        const guardiansData = await guardiansRes.json();
+
+        const users = usersData.users || [];
+        const guardianships = guardiansData.guardianships || [];
+
+        if (users.length === 0) {
+            container.innerHTML = '<p class="muted">No users in the system yet.</p>';
+            return;
+        }
+
+        // Build guardianship map
+        const guardianshipMap = {};
+        const wardMap = {};
+        for (const g of guardianships) {
+            guardianshipMap[g.user] = g.guardians || [];
+            for (const guardian of (g.guardians || [])) {
+                if (!wardMap[guardian]) wardMap[guardian] = [];
+                wardMap[guardian].push(g.user);
+            }
+        }
+
+        container.innerHTML = `
+            <div class="users-grid">
+                ${users.sort().map(u => {
+                    const safeUser = escapeHtml(u);
+                    const guardians = guardianshipMap[u] || [];
+                    const wards = wardMap[u] || [];
+                    return `
+                        <div class="user-card">
+                            <div class="user-header">
+                                <strong>${safeUser}</strong>
+                            </div>
+                            ${guardians.length > 0 ? `
+                                <div class="user-section">
+                                    <span class="section-label">Guardians:</span>
+                                    ${guardians.map(g => `<span class="guardian-chip">${escapeHtml(g)}</span>`).join('')}
+                                </div>
+                            ` : ''}
+                            ${wards.length > 0 ? `
+                                <div class="user-section">
+                                    <span class="section-label">Wards:</span>
+                                    ${wards.map(w => `<span class="ward-chip">${escapeHtml(w)}</span>`).join('')}
+                                </div>
+                            ` : ''}
+                            ${guardians.length === 0 && wards.length === 0 ? '<p class="muted small">No guardianship relationships</p>' : ''}
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    } catch (e) {
+        container.innerHTML = `<p class="muted">Error loading users: ${escapeHtml(e.message)}</p>`;
+    }
+}
+
+document.getElementById('refreshUsersBtn')?.addEventListener('click', loadUsersAndGuardianships);
 
 // ──────────────────────────────────────
 // Chat Logic

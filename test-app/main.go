@@ -107,6 +107,21 @@ func main() {
 			handlers.DossiersList(w, r)
 		}
 	})
+	http.HandleFunc("/api/dossiers/admin/list", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			handlers.DossiersListAll(w, r)
+		}
+	})
+	http.HandleFunc("/api/dossiers/admin/users", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			handlers.UsersList(w, r)
+		}
+	})
+	http.HandleFunc("/api/dossiers/admin/guardianships", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			handlers.GuardianshipsListAll(w, r)
+		}
+	})
 	http.HandleFunc("/api/dossiers/create", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
 			handlers.DossiersCreate(w, r)
