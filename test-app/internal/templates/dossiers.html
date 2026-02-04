@@ -146,8 +146,6 @@
         .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sage); animation: pulse 2s infinite; }
         .live-indicator.paused .live-dot { background: var(--text-muted); animation: none; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        .refresh-flash { animation: flash 0.3s ease; }
-        @keyframes flash { 0% { background: var(--sage-bg); } 100% { background: white; } }
 
         footer { display: flex; align-items: center; justify-content: space-between; padding: 2rem 2.5rem;
             color: var(--text-muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 3rem; }
@@ -256,14 +254,21 @@
         return data;
     }
 
-    async function render() {
+    async function render(cachedData) {
         const app = document.getElementById('app');
         try {
-            const [dossiersData, guardianshipsData, orgsData] = await Promise.all([
-                api('/list'),
-                api('/guardianships'),
-                api('/organizations')
-            ]);
+            let dossiersData, guardianshipsData, orgsData;
+            if (cachedData) {
+                dossiersData = cachedData.dossiersData;
+                guardianshipsData = cachedData.guardianshipsData;
+                orgsData = cachedData.orgsData;
+            } else {
+                [dossiersData, guardianshipsData, orgsData] = await Promise.all([
+                    api('/list'),
+                    api('/guardianships'),
+                    api('/organizations')
+                ]);
+            }
 
             const allDossiers = dossiersData.dossiers || [];
             const myDossiers = allDossiers.filter(d => d.owner === currentUser);
@@ -761,12 +766,7 @@
             const newHash = hashData({ dossiersData, guardianshipsData, orgsData });
             if (newHash !== lastDataHash) {
                 lastDataHash = newHash;
-                const app = document.getElementById('app');
-                if (app) app.classList.add('refresh-flash');
-                await render();
-                setTimeout(() => {
-                    if (app) app.classList.remove('refresh-flash');
-                }, 300);
+                await render({ dossiersData, guardianshipsData, orgsData });
             }
         } catch (e) {
             // Silently ignore refresh errors

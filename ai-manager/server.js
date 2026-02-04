@@ -541,10 +541,21 @@ app.get('/auth/callback', async (req, res) => {
             }
         );
         const claims = tokenSet.claims();
+        // Extract realm roles from various possible claim locations
+        // Keycloak can put them in realm_access.roles (nested object) or at top level
+        let roles = [];
+        if (claims.realm_access?.roles) {
+            roles = claims.realm_access.roles;
+        } else if (Array.isArray(claims['realm_access.roles'])) {
+            // Protocol mapper with claim.name = "realm_access.roles" creates flat claim
+            roles = claims['realm_access.roles'];
+        } else if (claims.roles) {
+            roles = claims.roles;
+        }
         req.session.user = {
             username: claims.preferred_username || claims.sub,
             email: claims.email,
-            roles: claims.realm_access?.roles || [],
+            roles,
         };
         req.session.id_token = tokenSet.id_token;
         delete req.session.oidcState;
