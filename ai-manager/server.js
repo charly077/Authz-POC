@@ -1086,6 +1086,15 @@ const TEST_APP_URL = process.env.TEST_APP_URL || 'http://test-app:3000';
 // Admin header for manager - bypasses FGA checks in test-app
 const MANAGER_ADMIN_HEADERS = { 'x-manager-admin': 'true' };
 
+// Middleware to check ai-admin role for sensitive operations
+function requireAdminRole(req, res, next) {
+    const roles = req.session?.user?.roles || [];
+    if (!roles.includes('ai-admin')) {
+        return res.status(403).json({ error: 'Forbidden: ai-admin role required' });
+    }
+    next();
+}
+
 app.get('/api/organizations', async (req, res) => {
     try {
         const result = await axios.get(`${TEST_APP_URL}/api/dossiers/organizations`);
@@ -1095,7 +1104,7 @@ app.get('/api/organizations', async (req, res) => {
     }
 });
 
-app.post('/api/organizations/:id/admins', async (req, res) => {
+app.post('/api/organizations/:id/admins', requireAdminRole, async (req, res) => {
     const { id } = req.params;
     const user = req.session?.user?.username;
     try {
@@ -1110,7 +1119,7 @@ app.post('/api/organizations/:id/admins', async (req, res) => {
     }
 });
 
-app.delete('/api/organizations/:id/admins', async (req, res) => {
+app.delete('/api/organizations/:id/admins', requireAdminRole, async (req, res) => {
     const { id } = req.params;
     const user = req.session?.user?.username;
     try {
@@ -1124,7 +1133,7 @@ app.delete('/api/organizations/:id/admins', async (req, res) => {
     }
 });
 
-app.delete('/api/organizations/:id', async (req, res) => {
+app.delete('/api/organizations/:id', requireAdminRole, async (req, res) => {
     const { id } = req.params;
     const user = req.session?.user?.username;
     try {
@@ -1142,7 +1151,7 @@ app.delete('/api/organizations/:id', async (req, res) => {
 // Users proxy (to test-app)
 // ──────────────────────────────────────
 
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', requireAdminRole, async (req, res) => {
     try {
         const result = await axios.get(`${TEST_APP_URL}/api/dossiers/admin/users`, {
             headers: MANAGER_ADMIN_HEADERS
@@ -1157,7 +1166,7 @@ app.get('/api/users', async (req, res) => {
 // Guardianships proxy (to test-app)
 // ──────────────────────────────────────
 
-app.get('/api/guardianships', async (req, res) => {
+app.get('/api/guardianships', requireAdminRole, async (req, res) => {
     try {
         const result = await axios.get(`${TEST_APP_URL}/api/dossiers/admin/guardianships`, {
             headers: MANAGER_ADMIN_HEADERS
@@ -1182,7 +1191,7 @@ const dossierLimiter = rateLimit({
 });
 app.use('/api/dossiers', dossierLimiter);
 
-app.get('/api/dossiers', async (req, res) => {
+app.get('/api/dossiers', requireAdminRole, async (req, res) => {
     try {
         const result = await axios.get(`${TEST_APP_URL}/api/dossiers/admin/list`, {
             headers: MANAGER_ADMIN_HEADERS
@@ -1193,7 +1202,7 @@ app.get('/api/dossiers', async (req, res) => {
     }
 });
 
-app.put('/api/dossiers/:id', async (req, res) => {
+app.put('/api/dossiers/:id', requireAdminRole, async (req, res) => {
     const { id } = req.params;
     const user = req.session?.user?.username;
     try {
@@ -1208,7 +1217,7 @@ app.put('/api/dossiers/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/dossiers/:id', async (req, res) => {
+app.delete('/api/dossiers/:id', requireAdminRole, async (req, res) => {
     const { id } = req.params;
     const user = req.session?.user?.username;
     try {
@@ -1222,7 +1231,7 @@ app.delete('/api/dossiers/:id', async (req, res) => {
     }
 });
 
-app.post('/api/dossiers/:id/toggle-public', async (req, res) => {
+app.post('/api/dossiers/:id/toggle-public', requireAdminRole, async (req, res) => {
     const { id } = req.params;
     const user = req.session?.user?.username;
     try {
@@ -1237,7 +1246,7 @@ app.post('/api/dossiers/:id/toggle-public', async (req, res) => {
     }
 });
 
-app.post('/api/dossiers/:id/block', async (req, res) => {
+app.post('/api/dossiers/:id/block', requireAdminRole, async (req, res) => {
     const { id } = req.params;
     const user = req.session?.user?.username;
     try {
@@ -1252,7 +1261,7 @@ app.post('/api/dossiers/:id/block', async (req, res) => {
     }
 });
 
-app.post('/api/dossiers/:id/unblock', async (req, res) => {
+app.post('/api/dossiers/:id/unblock', requireAdminRole, async (req, res) => {
     const { id } = req.params;
     const user = req.session?.user?.username;
     try {
@@ -1267,7 +1276,7 @@ app.post('/api/dossiers/:id/unblock', async (req, res) => {
     }
 });
 
-app.get('/api/dossiers/:id/relations', async (req, res) => {
+app.get('/api/dossiers/:id/relations', requireAdminRole, async (req, res) => {
     const { id } = req.params;
     const user = req.session?.user?.username;
     try {
@@ -1281,7 +1290,7 @@ app.get('/api/dossiers/:id/relations', async (req, res) => {
     }
 });
 
-app.post('/api/dossiers/:id/relations', async (req, res) => {
+app.post('/api/dossiers/:id/relations', requireAdminRole, async (req, res) => {
     const { id } = req.params;
     const user = req.session?.user?.username;
     try {
@@ -1296,7 +1305,7 @@ app.post('/api/dossiers/:id/relations', async (req, res) => {
     }
 });
 
-app.delete('/api/dossiers/:id/relations', async (req, res) => {
+app.delete('/api/dossiers/:id/relations', requireAdminRole, async (req, res) => {
     const { id } = req.params;
     const user = req.session?.user?.username;
     try {
