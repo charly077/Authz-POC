@@ -54,6 +54,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                 loadFGAStatus();
                 loadTuples();
                 loadModel();
+                loadOrganizations();
                 break;
             case 'visualize':
                 renderAllViz();
@@ -216,6 +217,136 @@ async function loadModel() {
 }
 
 document.getElementById('refreshModelBtn').addEventListener('click', loadModel);
+
+// ──────────────────────────────────────
+// Organizations Management
+// ──────────────────────────────────────
+
+async function loadOrganizations() {
+    const container = document.getElementById('orgsContainer');
+    try {
+        const res = await fetch('api/organizations');
+        const data = await res.json();
+        const orgs = data.organizations || [];
+
+        if (orgs.length === 0) {
+            container.innerHTML = '<p class="muted">No organizations yet. Create one in the <a href="/dossiers" target="_blank">Dossiers app</a>.</p>';
+            return;
+        }
+
+        container.innerHTML = orgs.map(o => {
+            const safeId = escapeHtml(o.id);
+            const safeName = escapeHtml(o.name);
+            return `
+                <div class="org-card">
+                    <div class="org-header">
+                        <strong>${safeName}</strong>
+                        <div class="org-header-actions">
+                            <code>${safeId}</code>
+                            <button class="danger-btn small-btn" onclick="deleteOrganization('${escapeAttr(o.id)}', '${escapeAttr(o.name)}')">Delete</button>
+                        </div>
+                    </div>
+                    <div class="org-section">
+                        <h4>Admins</h4>
+                        <div class="org-members">
+                            ${(o.admins && o.admins.length > 0) ? o.admins.map(a => `
+                                <div class="org-member-row">
+                                    <span>${escapeHtml(a)}</span>
+                                    <span class="admin-badge">admin</span>
+                                    <button class="danger-btn small-btn" onclick="removeOrgAdmin('${escapeAttr(o.id)}', '${escapeAttr(a)}')">Remove</button>
+                                </div>
+                            `).join('') : '<p class="muted">No admins</p>'}
+                        </div>
+                        <div class="org-add-row">
+                            <input type="text" id="addAdmin_${safeId}" placeholder="Username">
+                            <button class="primary-btn small-btn" onclick="addOrgAdmin('${escapeAttr(o.id)}')">Add Admin</button>
+                        </div>
+                    </div>
+                    <div class="org-section">
+                        <h4>Members (${o.members ? o.members.length : 0})</h4>
+                        <div class="org-members">
+                            ${(o.members && o.members.length > 0) ? o.members.map(m => {
+                                const isAdmin = o.admins && o.admins.includes(m);
+                                return `<span class="member-chip">${escapeHtml(m)}${isAdmin ? ' <span class="admin-badge">admin</span>' : ''}</span>`;
+                            }).join('') : '<p class="muted">No members</p>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        container.innerHTML = `<p class="muted">Error loading organizations: ${escapeHtml(e.message)}</p>`;
+    }
+}
+
+async function addOrgAdmin(orgId) {
+    const input = document.getElementById('addAdmin_' + orgId);
+    const user = input ? input.value.trim() : '';
+    if (!user) {
+        showToast('Username is required', 'error');
+        return;
+    }
+    try {
+        const res = await fetch(`api/organizations/${encodeURIComponent(orgId)}/admins`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('Admin added!');
+            input.value = '';
+            loadOrganizations();
+            loadTuples();
+        } else {
+            showToast(data.error || 'Failed to add admin', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function removeOrgAdmin(orgId, user) {
+    if (!confirm(`Remove ${user} as admin?`)) return;
+    try {
+        const res = await fetch(`api/organizations/${encodeURIComponent(orgId)}/admins`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('Admin removed');
+            loadOrganizations();
+            loadTuples();
+        } else {
+            showToast(data.error || 'Failed to remove admin', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+async function deleteOrganization(orgId, orgName) {
+    if (!confirm(`Delete organization "${orgName}"? This will remove all members and admins.`)) return;
+    try {
+        const res = await fetch(`api/organizations/${encodeURIComponent(orgId)}`, {
+            method: 'DELETE'
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('Organization deleted');
+            loadOrganizations();
+            loadTuples();
+        } else {
+            showToast(data.error || 'Failed to delete organization', 'error');
+        }
+    } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+    }
+}
+
+document.getElementById('refreshOrgsBtn')?.addEventListener('click', loadOrganizations);
 
 // ──────────────────────────────────────
 // Chat Logic

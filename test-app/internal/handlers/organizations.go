@@ -9,6 +9,11 @@ import (
 	"test-app/internal/store"
 )
 
+// isManagerAdmin checks if the request comes from the AI Manager with admin privileges
+func isManagerAdmin(r *http.Request) bool {
+	return r.Header.Get("x-manager-admin") == "true"
+}
+
 func OrganizationsList(w http.ResponseWriter, r *http.Request) {
 	store.Mu.RLock()
 	orgs := make([]map[string]interface{}, 0, len(store.Data.Organizations))
@@ -94,7 +99,7 @@ func OrganizationsAddMember(w http.ResponseWriter, r *http.Request, orgId string
 	}
 
 	currentUser := httputil.GetUser(r)
-	if !fga.Check("user:"+currentUser, "can_manage", "organization:"+orgId) {
+	if !isManagerAdmin(r) && !fga.Check("user:"+currentUser, "can_manage", "organization:"+orgId) {
 		httputil.JSONError(w, "Forbidden: only admins can manage members", 403)
 		return
 	}
@@ -146,7 +151,7 @@ func OrganizationsRemoveMember(w http.ResponseWriter, r *http.Request, orgId str
 	}
 
 	currentUser := httputil.GetUser(r)
-	if !fga.Check("user:"+currentUser, "can_manage", "organization:"+orgId) {
+	if !isManagerAdmin(r) && !fga.Check("user:"+currentUser, "can_manage", "organization:"+orgId) {
 		httputil.JSONError(w, "Forbidden: only admins can manage members", 403)
 		return
 	}
@@ -198,7 +203,7 @@ func OrganizationsAddAdmin(w http.ResponseWriter, r *http.Request, orgId string)
 	}
 
 	currentUser := httputil.GetUser(r)
-	if !fga.Check("user:"+currentUser, "can_manage", "organization:"+orgId) {
+	if !isManagerAdmin(r) && !fga.Check("user:"+currentUser, "can_manage", "organization:"+orgId) {
 		httputil.JSONError(w, "Forbidden: only admins can manage admins", 403)
 		return
 	}
@@ -265,7 +270,7 @@ func OrganizationsRemoveAdmin(w http.ResponseWriter, r *http.Request, orgId stri
 	}
 
 	currentUser := httputil.GetUser(r)
-	if !fga.Check("user:"+currentUser, "can_manage", "organization:"+orgId) {
+	if !isManagerAdmin(r) && !fga.Check("user:"+currentUser, "can_manage", "organization:"+orgId) {
 		httputil.JSONError(w, "Forbidden: only admins can manage admins", 403)
 		return
 	}
@@ -289,6 +294,13 @@ func OrganizationsRemoveAdmin(w http.ResponseWriter, r *http.Request, orgId stri
 		return
 	}
 
+	// Prevent removing the last admin
+	if len(org.Admins) == 1 && httputil.Contains(org.Admins, user) {
+		store.Mu.Unlock()
+		httputil.JSONError(w, "Cannot remove the last admin. Add another admin first or delete the organization.", 400)
+		return
+	}
+
 	prevAdmins := make([]string, len(org.Admins))
 	copy(prevAdmins, org.Admins)
 	filtered := make([]string, 0, len(org.Admins))
@@ -303,6 +315,77 @@ func OrganizationsRemoveAdmin(w http.ResponseWriter, r *http.Request, orgId stri
 	if err := fga.Write(nil, []store.TupleKey{{User: "user:" + user, Relation: "admin", Object: "organization:" + orgId}}); err != nil {
 		store.Mu.Lock()
 		org.Admins = prevAdmins
+		store.Mu.Unlock()
+		httputil.JSONError(w, err.Error(), 500)
+		return
+	}
+
+	store.Save()
+	httputil.JSONResponse(w, map[string]bool{"success": true}, 200)
+}
+
+func OrganizationsDelete(w http.ResponseWriter, r *http.Request, orgId string) {
+	if !config.FgaReady {
+		httputil.JSONError(w, "OpenFGA not ready", 503)
+		return
+	}
+
+	currentUser := httputil.GetUser(r)
+	if !isManagerAdmin(r) && !fga.Check("user:"+currentUser, "can_manage", "organization:"+orgId) {
+		httputil.JSONError(w, "Forbidden: only admins can delete organizations", 403)
+		return
+	}
+
+	store.Mu.Lock()
+	org, ok := store.Data.Organizations[orgId]
+	if !ok {
+		store.Mu.Unlock()
+		httputil.JSONError(w, "Organization not found", 404)
+		return
+	}
+
+	// Store copies for rollback and FGA tuple deletion
+	members := make([]string, len(org.Members))
+	copy(members, org.Members)
+	admins := make([]string, len(org.Admins))
+	copy(admins, org.Admins)
+	orgCopy := &store.Organization{Name: org.Name, Members: members, Admins: admins}
+
+	// Find all dossiers linked to this organization
+	var affectedDossiers []string
+	for dossId, dossier := range store.Data.Dossiers {
+		if dossier.OrgId == orgId {
+			affectedDossiers = append(affectedDossiers, dossId)
+			dossier.OrgId = "" // Clear the org reference
+		}
+	}
+
+	// Delete from data store
+	delete(store.Data.Organizations, orgId)
+	store.Mu.Unlock()
+
+	// Build tuples to delete (all member, admin, and org_parent relations)
+	var deleteTuples []store.TupleKey
+	for _, member := range members {
+		deleteTuples = append(deleteTuples, store.TupleKey{User: "user:" + member, Relation: "member", Object: "organization:" + orgId})
+	}
+	for _, admin := range admins {
+		deleteTuples = append(deleteTuples, store.TupleKey{User: "user:" + admin, Relation: "admin", Object: "organization:" + orgId})
+	}
+	// Delete org_parent tuples for affected dossiers
+	for _, dossId := range affectedDossiers {
+		deleteTuples = append(deleteTuples, store.TupleKey{User: "organization:" + orgId, Relation: "org_parent", Object: "dossier:" + dossId})
+	}
+
+	if err := fga.Write(nil, deleteTuples); err != nil {
+		// Rollback: restore organization and dossier org references
+		store.Mu.Lock()
+		store.Data.Organizations[orgId] = orgCopy
+		for _, dossId := range affectedDossiers {
+			if dossier, ok := store.Data.Dossiers[dossId]; ok {
+				dossier.OrgId = orgId
+			}
+		}
 		store.Mu.Unlock()
 		httputil.JSONError(w, err.Error(), 500)
 		return

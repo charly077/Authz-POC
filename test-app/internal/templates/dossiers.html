@@ -308,19 +308,39 @@
                 '  <h3>Organizations</h3>' +
                 (organizations.length === 0 ? '<p class="muted">No organizations yet.</p>' :
                     organizations.map(function(o) {
+                        var isAdmin = o.admins && o.admins.indexOf(currentUser) !== -1;
+                        var safeId = escapeHtml(o.id);
                         return '<div class="org-card">' +
                             '<div style="display:flex;justify-content:space-between;align-items:center;">' +
                             '<strong>' + escapeHtml(o.name) + '</strong>' +
-                            '<span class="badge-org">ID: ' + o.id + '</span></div>' +
+                            '<div style="display:flex;gap:0.35rem;align-items:center;">' +
+                            '<span class="badge-org">ID: ' + safeId + '</span>' +
+                            (isAdmin ? '<button class="btn btn-danger btn-xs" onclick="deleteOrg(\'' + safeId + '\',\'' + escapeHtml(o.name) + '\')">Delete Org</button>' : '') +
+                            '</div></div>' +
+                            '<h4 style="margin-top:0.5rem;">Admins</h4>' +
+                            (o.admins && o.admins.length > 0 ? o.admins.map(function(a) {
+                                return '<div class="org-member"><span>' + escapeHtml(a) + '</span>' +
+                                    '<span class="relation-badge" style="background:#faf0d4;color:#9a7b2c;margin-left:0.3rem;">admin</span>' +
+                                    (isAdmin ? '<button class="btn btn-danger btn-xs" onclick="removeOrgAdmin(\'' + safeId + '\',\'' + escapeHtml(a) + '\')">&times;</button>' : '') +
+                                    '</div>';
+                            }).join('') : '<p class="muted">No admins</p>') +
+                            (isAdmin ? '<div style="display:flex;gap:0.35rem;margin-top:0.4rem;">' +
+                            '<input type="text" id="orgAdmin_' + safeId + '" placeholder="Username" style="margin-bottom:0;">' +
+                            '<button class="btn btn-primary btn-sm" onclick="addOrgAdmin(\'' + safeId + '\')">Add Admin</button>' +
+                            '</div>' : '') +
                             '<h4 style="margin-top:0.5rem;">Members</h4>' +
                             (o.members && o.members.length > 0 ? o.members.map(function(m) {
+                                var memberIsAdmin = o.admins && o.admins.indexOf(m) !== -1;
                                 return '<div class="org-member"><span>' + escapeHtml(m) + '</span>' +
-                                    '<button class="btn btn-danger btn-xs" onclick="removeOrgMember(\'' + o.id + '\',\'' + escapeHtml(m) + '\')">&times;</button></div>';
+                                    (memberIsAdmin ? '<span class="relation-badge" style="background:#faf0d4;color:#9a7b2c;margin-left:0.3rem;">admin</span>' : '') +
+                                    (isAdmin ? '<button class="btn btn-danger btn-xs" onclick="removeOrgMember(\'' + safeId + '\',\'' + escapeHtml(m) + '\')">&times;</button>' : '') +
+                                    '</div>';
                             }).join('') : '<p class="muted">No members</p>') +
-                            '<div style="display:flex;gap:0.35rem;margin-top:0.4rem;">' +
-                            '<input type="text" id="orgMember_' + o.id + '" placeholder="Username" style="margin-bottom:0;">' +
-                            '<button class="btn btn-primary btn-sm" onclick="addOrgMember(\'' + o.id + '\')">Add</button>' +
-                            '</div></div>';
+                            (isAdmin ? '<div style="display:flex;gap:0.35rem;margin-top:0.4rem;">' +
+                            '<input type="text" id="orgMember_' + safeId + '" placeholder="Username" style="margin-bottom:0;">' +
+                            '<button class="btn btn-primary btn-sm" onclick="addOrgMember(\'' + safeId + '\')">Add Member</button>' +
+                            '</div>' : '') +
+                            '</div>';
                     }).join('')) +
                 '  <h4 style="margin-top:1rem;">Create Organization</h4>' +
                 '  <div style="display:flex;gap:0.5rem;margin-top:0.4rem;">' +
@@ -524,6 +544,38 @@
         try {
             await api('/organizations/' + orgId + '/members', { method: 'DELETE', body: JSON.stringify({ member: member }) });
             showToast('Member removed');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function addOrgAdmin(orgId) {
+        var input = document.getElementById('orgAdmin_' + orgId);
+        var user = input ? input.value.trim() : '';
+        if (!user) return;
+        try {
+            await api('/organizations/' + orgId + '/admins', { method: 'POST', body: JSON.stringify({ user: user }) });
+            showToast('Admin added!');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function removeOrgAdmin(orgId, user) {
+        var confirmMsg = user === currentUser
+            ? 'Remove yourself as admin? You will lose management access.'
+            : 'Remove ' + user + ' as admin?';
+        if (!confirm(confirmMsg)) return;
+        try {
+            await api('/organizations/' + orgId + '/admins', { method: 'DELETE', body: JSON.stringify({ user: user }) });
+            showToast('Admin removed');
+            render();
+        } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    async function deleteOrg(orgId, orgName) {
+        if (!confirm('Delete organization "' + orgName + '"? This will remove all members and admins.')) return;
+        try {
+            await api('/organizations/' + orgId, { method: 'DELETE' });
+            showToast('Organization deleted');
             render();
         } catch (e) { showToast(e.message, 'error'); }
     }

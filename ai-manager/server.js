@@ -112,6 +112,16 @@ app.use('/api/generate-rule', aiLimiter);
 app.use('/api/chat', aiLimiter);
 app.use('/api/explain-authz', aiLimiter);
 
+// Rate limiter for organization management (30 req per minute per IP)
+const orgLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many organization requests, please try again later' },
+});
+app.use('/api/organizations', orgLimiter);
+
 // ──────────────────────────────────────
 // Required environment variables — fail fast if missing
 // ──────────────────────────────────────
@@ -129,8 +139,9 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: false,
+        secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
+        sameSite: 'strict',
         maxAge: 3600000,
         path: '/',
     },
@@ -1065,6 +1076,67 @@ function extractBlock(lines, startLine) {
 
     return { body, startLine, endLine };
 }
+
+// ──────────────────────────────────────
+// Organizations proxy (to test-app)
+// ──────────────────────────────────────
+
+const TEST_APP_URL = process.env.TEST_APP_URL || 'http://test-app:3000';
+
+// Admin header for manager - bypasses FGA checks in test-app
+const MANAGER_ADMIN_HEADERS = { 'x-manager-admin': 'true' };
+
+app.get('/api/organizations', async (req, res) => {
+    try {
+        const result = await axios.get(`${TEST_APP_URL}/api/dossiers/organizations`);
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
+app.post('/api/organizations/:id/admins', async (req, res) => {
+    const { id } = req.params;
+    const user = req.session?.user?.username;
+    try {
+        const result = await axios.post(
+            `${TEST_APP_URL}/api/dossiers/organizations/${encodeURIComponent(id)}/admins`,
+            req.body,
+            { headers: { 'x-current-user': user, ...MANAGER_ADMIN_HEADERS } }
+        );
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
+app.delete('/api/organizations/:id/admins', async (req, res) => {
+    const { id } = req.params;
+    const user = req.session?.user?.username;
+    try {
+        const result = await axios.delete(
+            `${TEST_APP_URL}/api/dossiers/organizations/${encodeURIComponent(id)}/admins`,
+            { data: req.body, headers: { 'x-current-user': user, ...MANAGER_ADMIN_HEADERS } }
+        );
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
+
+app.delete('/api/organizations/:id', async (req, res) => {
+    const { id } = req.params;
+    const user = req.session?.user?.username;
+    try {
+        const result = await axios.delete(
+            `${TEST_APP_URL}/api/dossiers/organizations/${encodeURIComponent(id)}`,
+            { headers: { 'x-current-user': user, ...MANAGER_ADMIN_HEADERS } }
+        );
+        res.json(result.data);
+    } catch (e) {
+        res.status(e.response?.status || 500).json({ error: e.response?.data?.error || e.message });
+    }
+});
 
 // Push the current policy to OPA on startup
 async function pushPolicyToOPA() {

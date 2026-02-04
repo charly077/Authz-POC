@@ -157,6 +157,11 @@ func main() {
 			}
 			return
 		}
+		// DELETE /api/dossiers/organizations/{id} - delete organization
+		if len(parts) == 1 && parts[0] != "" && r.Method == "DELETE" {
+			handlers.OrganizationsDelete(w, r, parts[0])
+			return
+		}
 		httputil.JSONError(w, "Not found", 404)
 	})
 	http.HandleFunc("/api/dossiers/debug/tuples", func(w http.ResponseWriter, r *http.Request) {

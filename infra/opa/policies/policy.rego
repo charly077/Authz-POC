@@ -198,8 +198,10 @@ authorized if {
     http_request.path == "/api/health"
 }
 
+# Protected endpoint — restricted to bob only
 authorized if {
     has_valid_token
+    token_payload.preferred_username == "bob"
     http_request.path == "/api/protected"
 }
 
