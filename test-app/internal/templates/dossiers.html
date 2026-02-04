@@ -139,6 +139,16 @@
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
 
+        .live-indicator { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.85rem;
+            background: var(--sage-bg); border-radius: 999px; font-size: 0.78rem; font-weight: 600; color: var(--sage-deep); cursor: pointer; transition: all 0.2s; }
+        .live-indicator:hover { background: #d0dfd5; }
+        .live-indicator.paused { background: var(--surface); color: var(--text-muted); }
+        .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sage); animation: pulse 2s infinite; }
+        .live-indicator.paused .live-dot { background: var(--text-muted); animation: none; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .refresh-flash { animation: flash 0.3s ease; }
+        @keyframes flash { 0% { background: var(--sage-bg); } 100% { background: white; } }
+
         footer { display: flex; align-items: center; justify-content: space-between; padding: 2rem 2.5rem;
             color: var(--text-muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 3rem; }
         footer a { color: var(--rose-deep); text-decoration: none; font-weight: 700; }
@@ -192,6 +202,10 @@
             <a href="/api/health">Health</a>
         </div>
         <div class="nav-user">
+            <div class="live-indicator" id="liveIndicator" onclick="toggleAutoRefresh()" title="Click to pause/resume auto-refresh">
+                <span class="live-dot"></span>
+                <span id="liveText">Live</span>
+            </div>
             <div class="user-badge">
                 <div class="user-avatar">{{index .Username 0 | printf "%c"}}</div>
                 <span class="user-name">{{.Username}}</span>
@@ -725,7 +739,75 @@
         }
     }
 
-    render();
+    // ──────────────────────────────────────
+    // Auto-refresh for live demos
+    // ──────────────────────────────────────
+    let autoRefreshEnabled = true;
+    let autoRefreshInterval = null;
+    let lastDataHash = '';
+
+    function hashData(data) {
+        return JSON.stringify(data);
+    }
+
+    async function checkForUpdates() {
+        if (!autoRefreshEnabled) return;
+        try {
+            const [dossiersData, guardianshipsData, orgsData] = await Promise.all([
+                api('/list'),
+                api('/guardianships'),
+                api('/organizations')
+            ]);
+            const newHash = hashData({ dossiersData, guardianshipsData, orgsData });
+            if (newHash !== lastDataHash) {
+                lastDataHash = newHash;
+                const app = document.getElementById('app');
+                if (app) app.classList.add('refresh-flash');
+                await render();
+                setTimeout(() => {
+                    if (app) app.classList.remove('refresh-flash');
+                }, 300);
+            }
+        } catch (e) {
+            // Silently ignore refresh errors
+        }
+    }
+
+    function toggleAutoRefresh() {
+        autoRefreshEnabled = !autoRefreshEnabled;
+        const indicator = document.getElementById('liveIndicator');
+        const text = document.getElementById('liveText');
+        if (autoRefreshEnabled) {
+            indicator.classList.remove('paused');
+            text.textContent = 'Live';
+            startAutoRefresh();
+        } else {
+            indicator.classList.add('paused');
+            text.textContent = 'Paused';
+            stopAutoRefresh();
+        }
+    }
+
+    function startAutoRefresh() {
+        stopAutoRefresh();
+        autoRefreshInterval = setInterval(checkForUpdates, 3000);
+    }
+
+    function stopAutoRefresh() {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    }
+
+    // Initial render and start auto-refresh
+    render().then(() => {
+        // Capture initial hash after first render
+        Promise.all([api('/list'), api('/guardianships'), api('/organizations')])
+            .then(([d, g, o]) => { lastDataHash = hashData({ dossiersData: d, guardianshipsData: g, orgsData: o }); })
+            .catch(() => {});
+    });
+    startAutoRefresh();
     </script>
 </body>
 </html>
