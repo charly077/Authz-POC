@@ -1,0 +1,79 @@
+Codemap Diff Report
+===================
+Generated: 2026-02-04
+Version: 1.0.0
+
+Summary
+-------
+Status: INITIAL CREATION (no previous codemaps existed)
+Change Percentage: 100% (new files)
+
+Files Created
+-------------
+1. docs/codemaps/architecture.md  (3.2 KB)
+   - System overview and request flow
+   - Service architecture diagrams
+   - Service inventory table
+   - Authorization layers (ABAC + ReBAC)
+   - Key files reference
+   - Network topology
+
+2. docs/codemaps/backend.md  (5.8 KB)
+   - test-app (Go) structure and routes
+   - ai-manager (Node.js) structure and routes
+   - Module dependencies
+   - Key functions reference
+   - Middleware and rate limiting
+   - AI integration details
+
+3. docs/codemaps/frontend.md  (3.5 KB)
+   - test-app templates (home.html, dossiers.html)
+   - ai-manager SPA structure
+   - Tab system and key functions
+   - Mermaid.js visualization
+   - OPA 403 page details
+
+4. docs/codemaps/data.md  (4.8 KB)
+   - Application data models (Go structs)
+   - OpenFGA authorization model
+   - Keycloak identity model
+   - API request/response schemas
+   - Data flow diagram
+   - Audit log schema
+
+Total Size: ~17.3 KB
+
+Coverage Analysis
+-----------------
+Components Documented:
+[x] test-app (Go backend)
+[x] ai-manager (Node.js backend)
+[x] OpenFGA model
+[x] OPA policies
+[x] Keycloak realms
+[x] Envoy configuration
+[x] Docker services
+[x] Data persistence
+[x] API endpoints
+[x] Frontend templates
+
+Recommendations
+---------------
+1. Keep codemaps updated when:
+   - Adding new API endpoints
+   - Modifying OpenFGA model
+   - Changing data structures
+   - Adding new services
+
+2. Consider adding:
+   - docs/codemaps/infra.md for detailed infrastructure docs
+   - Sequence diagrams for complex flows
+   - Error handling patterns
+
+Next Update
+-----------
+Run /update-codemaps after significant changes to:
+- test-app/main.go (routes)
+- ai-manager/server.js (routes)
+- infra/openfga/init.js (model)
+- docker-compose.yml (services)
