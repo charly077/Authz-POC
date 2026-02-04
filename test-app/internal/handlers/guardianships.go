@@ -159,25 +159,35 @@ func GuardianshipRemove(w http.ResponseWriter, r *http.Request, userId string) {
 	store.Mu.Lock()
 	// If userId is a guardian of user
 	if guardians, ok := store.Data.Guardianships[user]; ok {
+		found := false
 		var filtered []string
 		for _, g := range guardians {
-			if g != userId {
+			if g == userId {
+				found = true
+			} else {
 				filtered = append(filtered, g)
 			}
 		}
-		store.Data.Guardianships[user] = filtered
-		deletes = append(deletes, store.TupleKey{User: "user:" + userId, Relation: "guardian", Object: "user:" + user})
+		if found {
+			store.Data.Guardianships[user] = filtered
+			deletes = append(deletes, store.TupleKey{User: "user:" + userId, Relation: "guardian", Object: "user:" + user})
+		}
 	}
 	// If user is a guardian of userId
 	if guardians, ok := store.Data.Guardianships[userId]; ok {
+		found := false
 		var filtered []string
 		for _, g := range guardians {
-			if g != user {
+			if g == user {
+				found = true
+			} else {
 				filtered = append(filtered, g)
 			}
 		}
-		store.Data.Guardianships[userId] = filtered
-		deletes = append(deletes, store.TupleKey{User: "user:" + user, Relation: "guardian", Object: "user:" + userId})
+		if found {
+			store.Data.Guardianships[userId] = filtered
+			deletes = append(deletes, store.TupleKey{User: "user:" + user, Relation: "guardian", Object: "user:" + userId})
+		}
 	}
 	store.Mu.Unlock()
 	store.Save()
